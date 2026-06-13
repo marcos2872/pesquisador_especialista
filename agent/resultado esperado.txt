@@ -1,0 +1,177 @@
+A seguir está uma revisão técnica preliminar e rastreável, organizada nos quatro blocos solicitados. Ela deve ser tratada como levantamento técnico de anterioridade, não como parecer jurídico de liberdade de operação. Para FTO formal, seria necessário complementar com busca profissional em Scopus/Web of Science/Lens/Espacenet/INPI e análise de reivindicações por especialista em patentes.
+
+1. Estado da arte técnico-científico
+1.1 Síntese dos principais achados
+
+A literatura indica que a extrusão dupla rosca co-rotante é uma das rotas mais maduras e escaláveis para produzir nanocompósitos polímero/grafeno, especialmente quando o objetivo é substituir rotas com solventes por melt compounding. A revisão de Sanes et al. mostra que nanocompósitos com grafeno, GO, rGO e derivados têm sido produzidos majoritariamente por processamento no fundido, frequentemente por extrusão dupla rosca seguida de injeção, e destaca que a otimização da configuração da rosca, tempo de residência, rotação, temperatura e energia específica é decisiva para dispersão da nanofase.
+
+A relação central observada é um trade-off entre dispersão e dano ao material. Elementos de alto cisalhamento, como kneading blocks, elementos reversos e zonas de mistura intensiva, ajudam a reduzir aglomerados de grafeno, GNP, CNT e nanocargas lamelares, mas aumentam torque, pressão, temperatura local, tempo de residência e risco de degradação da matriz ou redução do aspecto das nanoplaquetas. Em PA6/GNP, por exemplo, Attar et al. compararam roscas de baixa, média e alta intensidade de cisalhamento e observaram que configurações mais intensas favoreceram a rigidez e a quebra de aglomerados, mas propriedades de impacto e ductilidade continuaram sensíveis ao processamento.
+
+Em nanocompósitos com CNT, que são bons análogos para dispersão de nanocargas de alto aspecto, Villmow et al. mostram que configuração de rosca, tempo de residência e energia mecânica específica influenciam diretamente a dispersão macroscópica. A presença de elementos reversos e kneading/mixing elements tende a aumentar o tempo mínimo de residência e a intensidade de mistura, mas também aumenta a exposição termo-mecânica.
+
+Há uma tendência clara de migração de abordagens empíricas para modelagem computacional e otimização multiobjetivo. Lewandowski e Wilczyński revisam modelos globais de extrusão dupla rosca, incluindo transporte de sólidos, plastificação, escoamento do fundido, CFD, otimização e scale-up. Já Nastaj e Wilczyński destacam que simulação acoplada a algoritmos genéticos pode ser mais eficiente que tentativa-e-erro experimental, especialmente quando se busca simultaneamente maximizar vazão, controlar temperatura, reduzir comprimento de fusão e ajustar geometria de rosca.
+
+1.2 Papel dos elementos de rosca
+
+Elementos de transporte
+São usados para alimentação, fusão, transporte e pressurização. Isoladamente, tendem a promover mais transporte do que dispersão. São importantes para modular preenchimento, pressão, tempo de residência e evitar sobreaquecimento.
+
+Kneading blocks
+São os elementos mais recorrentes para mistura dispersiva. O ângulo de defasagem, número de discos, largura dos discos e posição ao longo do barril afetam cisalhamento, pressão e tempo de residência. Configurações mais agressivas podem quebrar aglomerados, mas podem também reduzir comprimento/aspect ratio de nanoplaquetas ou nanotubos. Em PC/MWCNT, Pötschke et al. relatam que configurações com mais kneading blocks melhoraram dispersão e reduziram limiar de percolação elétrica, mas aumentos adicionais de energia mecânica podem apresentar efeito de saturação.
+
+Elementos reversos / back-conveying
+Aumentam o grau de enchimento, pressão local e tempo de residência, favorecendo mistura intensiva. São úteis quando há aglomerados persistentes, mas são pontos críticos para torque, aquecimento viscoso e degradação.
+
+Elementos distributivos e dentados
+São usados para aumentar divisão, reorientação e recombinação de fluxo, favorecendo distribuição espacial da carga. Em geral, não bastam para desaglomeração forte se a tensão local não ultrapassa a tensão crítica de ruptura dos aglomerados.
+
+Elementos de mistura extensional
+São especialmente promissores para grafeno, porque podem impor deformações elongacionais e de contração-expansão com melhor eficiência dispersiva do que cisalhamento puro. Carson e Maia propuseram um elemento de mistura extensional para extrusão dupla rosca, com canais de convergência-divergência capazes de gerar escoamento dominado por extensão. Estudos posteriores de Pandey e Maia indicam que elementos extensionais podem melhorar quebra de gotas/agregados em misturas e nanocompósitos sem penalidade excessiva de vazão quando combinados com elementos tipo pin.
+
+Elementos especiais, patenteados e híbridos
+A literatura e patentes incluem elementos com geometrias helicoidais modificadas, canais convergente-divergentes, elementos estáticos, elementos com pontas inclinadas, rotores de homogeneização e misturadores dispersivos/distributivos. Rauwendaal, por exemplo, descreve elementos projetados para gerar alto cisalhamento e fluxo elongacional repetido, com menor queda de pressão por orientação helicoidal.
+
+1.3 Tecnologias de incorporação de grafeno
+
+A rota mais consolidada é melt compounding direto, mas ela sofre com alimentação irregular de pó, baixa molhabilidade, aglomeração e possível degradação. Por isso, aparecem alternativas como:
+
+masterbatch concentrado, seguido de diluição;
+pré-dispersão em líquido e remoção posterior de solvente/inert liquid;
+wet blend;
+alimentação lateral para reduzir tempo de residência da carga;
+grafeno funcionalizado ou compatibilizado;
+extrusão reativa;
+exfoliação in situ de grafite/graphite microparticles dentro do fundido.
+
+Sanes et al. destacam que rotas com solvente ou polimerização in situ podem melhorar dispersão em laboratório, mas têm limitações ambientais, de saúde e de escala industrial; por isso, a extrusão no fundido permanece atrativa para aplicações industriais.
+
+1.4 Critérios de avaliação da mistura
+
+Os critérios mais usados na literatura são:
+
+redução de aglomerados por MEV/MET;
+análise de imagem e fração de área de aglomerados;
+reologia oscilatória, módulo de armazenamento e percolação reológica;
+condutividade elétrica e térmica;
+resistência, módulo, alongamento e impacto;
+DSC/TGA para cristalinidade, estabilidade térmica e degradação;
+torque, pressão, temperatura de massa, tempo de residência e energia mecânica específica;
+estabilidade dimensional e desempenho final da peça.
+
+Em estudos recentes com PA6/GNP, SEM e reologia foram usados para avaliar dispersão, enquanto propriedades mecânicas evidenciaram o efeito combinado de rotação e desenho de rosca.
+
+1.5 Métodos de otimização
+
+A evolução metodológica pode ser resumida em quatro fases:
+
+Fase empírica / DoE
+Variação experimental de temperatura, rpm, vazão, teor de carga, ordem de alimentação e configuração de rosca.
+
+Fase reológica e semiempírica
+Uso de modelos de tempo de residência, energia específica, taxa de cisalhamento, pressão e preenchimento.
+
+Fase CFD / elementos finitos / particle tracking
+Simulação 3D de elementos individuais e sequências de rosca para estimar mistura distributiva, dispersiva, tensão acumulada, deformação e interfacial area. Oldemeier e Schöppner, por exemplo, analisaram elementos individuais por CFD 3D e rastreamento de partículas para quantificar propriedades de mistura.
+
+Fase IA / otimização multiobjetivo / gêmeos digitais
+Uso de algoritmos genéticos, redes neurais, modelos substitutos, Gaussian processes, Bayesian optimization e digital twins. Nastaj e Wilczyński demonstram uso de algoritmos genéticos para otimização de extrusão dupla rosca contrarrotante, considerando vazão, temperatura do fundido, comprimento de fusão e geometria da rosca. Sarishvili et al. propõem gêmeos digitais híbridos para extrusão, combinando poucos experimentos reais, modelo físico-químico calibrado e dados simulados.
+
+2. Pesquisa de anterioridade e patentes
+2.1 Patentes centrais identificadas
+Patente	Titular / depositante	Ano / jurisdição	Problema técnico	Solução proposta	Relação com o projeto	Relevância FTO
+US5932159A — Screw extruder with improved dispersive mixing	Rauwendaal Extrusion Engineering	Prior. 1997; EUA; expirada	Melhorar mistura dispersiva em extrusão	Elementos dispersivos para concentrados, blends e polímeros	Elementos de rosca para mistura dispersiva	Baixo risco bloqueante se expirada, mas forte anterioridade técnica.
+US6136246A — Screw extruder with improved dispersive mixing elements	Rauwendaal Extrusion Engineering	Prior. 1997/1999; EUA	Aumentar mistura dispersiva com menor penalidade	Elementos com maior ângulo de hélice, aplicáveis também a twin screw	Geometria de elemento dispersivo	Baixo risco se expirada; relevante para novidade.
+EP1156918B1 — Screw extruder with improved dispersive mixing elements	Rauwendaal	Europa	Mistura dispersiva/distributiva com alto cisalhamento e elongação	Passagens repetidas por regiões de alta tensão	Relacionada a elementos com cisalhamento + elongação	Verificar status por país; relevante para design-around.
+US5000900A — Twin screw extruder	Krauss-Maffei / Mannesmann Demag	Prior. 1988; EUA; expirada	Homogeneização em extrusora dupla rosca	Unidade de homogeneização com rotores tipo célula	Elementos especiais/homogeneização	Baixo risco se expirada; anterioridade de geometria especial.
+US20150267030A1 / US9896565B2 — In situ exfoliation method to fabricate graphene-reinforced PMC	Rutgers, The State University of New Jersey	Prior. 2013; EUA; concedida	Exfoliar grafite no fundido para gerar grafeno	Sucessivos eventos de cisalhamento e dobramento/fluxo elongacional em polímero fundido	Altamente relacionada a exfoliação in situ de grafite/grafeno em compósito polimérico	Atenção alta: família inclui jurisdições como EUA, EP, JP, KR, CN e BR; verificar reivindicações ativas.
+US9790334B2 — Polymer-graphene nanocomposites	Reliance Industries / Xolve	Aplic. 2014; EUA	Melhorar dispersão/exfoliação via masterbatch	Masterbatch polímero/grafeno com alta dispersão	Relacionada a masterbatch de grafeno	Verificar status e família; risco depende da rota adotada.
+US7906053B1 — Polymer-graphite nanocomposites via solid-state shear pulverization	Northwestern University	Prior. 2006; EUA; ativa até 2029, segundo Google Patents	Dispersar grafite por pulverização no estado sólido	Uso de SSSP, inclusive extrusora modificada de dupla rosca	Rota alternativa à extrusão fundida	Atenção se o projeto usar SSSP ou extrusão modificada em estado sólido.
+WO2017120642A1 — Process for preparation of polyethylene nanocomposite	Qenos Pty Ltd	PCT/AU; família inclui BR e US	Dispersão de nanopartículas planas de carbono em PE	Dispersão em líquido inerte, remoção do líquido e compounding	Relacionada a grafeno/GNP em PE e pré-dispersão líquida	Verificar família brasileira e reivindicações nacionais.
+US10793695B2 — TPU graphene oxide nanocomposites	Case Western Reserve University	EUA; concedida	Melhorar propriedades de TPU com GO	GO bem disperso em TPU com interação com segmento rígido	Material/aplicação, menos sobre rosca	Risco moderado se matriz TPU/GO for central.
+US8110026B2 — Functional graphene-polymer nanocomposites for gas barrier	Princeton University	Prior. 2006; EUA	Barreiras a gases com grafeno funcional	Compounding em polímero; twin screw citado como preferido	Relacionada a nanocompósito grafeno/polímero, não a elemento	Risco depende da aplicação final e formulação.
+US11931950B2 / US20200101670A1 — Machine learning informed control systems for extrusion printing	—	Prior. 2018; EUA	Controle de processo de extrusão/impressão com ML	Sistema de controle informado por aprendizado de máquina	Adjacente a IA + extrusão; não focado em dupla rosca	Baixo a moderado para controle digital, alto apenas se arquitetura semelhante.
+CN117140894A — Digital twin-based extrusion/injection control	—	China; pub. 2023	Prevenção de defeitos com gêmeo digital	Controle integrado de extrusão/injeção por digital twin	Adjacente a gêmeos digitais de processo	Relevante como tendência, menor relação com elemento de rosca.
+2.2 Interpretação de risco de sobreposição
+
+O maior risco de sobreposição não parece estar em “usar extrusão dupla rosca para grafeno”, pois isso já é tecnologia amplamente difundida. O risco maior está em rotas específicas protegidas, por exemplo: exfoliação in situ de grafite por eventos sucessivos de cisalhamento/elongação, masterbatches de grafeno com determinadas composições e processos de pré-dispersão líquida para nanopartículas planas de carbono. A família Rutgers sobre exfoliação in situ é particularmente relevante porque descreve grafite distribuído em polímero fundido e sucessivos eventos de cisalhamento/dobramento para formar nanopartículas de grafeno, com família internacional incluindo Brasil.
+
+As patentes de elementos de mistura de Rauwendaal e Krauss-Maffei são relevantes como anterioridade técnica, mas várias aparecem como expiradas ou antigas. Isso reduz potencial bloqueante, mas dificulta reivindicar genericamente “elemento dispersivo”, “mistura elongacional” ou “alto cisalhamento” sem diferenciação geométrica e funcional clara.
+
+3. Tabela comparativa técnico-científica
+Referência ou patente	Ano	Tipo	Material / aplicação	Tecnologia / processo	Elemento ou geometria	Método de otimização / modelagem	Variáveis consideradas	Métricas	Principais resultados	Limitações	Relevância para polímero/grafeno
+Sanes et al., Materials, DOI 10.3390/ma13030549	2020	Revisão	Grafeno, GO, rGO em termoplásticos	Melt compounding, twin screw, injeção	Configuração de rosca em geral	Revisão de literatura	Temperatura, rpm, residência, energia	Dispersão, propriedades mecânicas/térmicas/elétricas	Consolida extrusão como rota escalável	Não aprofunda geometria fina de elementos	Base para justificar melt compounding de grafeno
+Attar et al., J. Mater. Sci.: Composites	2025	Artigo	PA6 + 3% GNP	Twin screw melt blending	Roscas de baixa, média e alta intensidade; kneading blocks	Comparação experimental	100/200/300 rpm, desenho de rosca	Tração, impacto, SEM, reologia	Alta intensidade melhora rigidez e dispersão, mas impacto diminui	Um teor de GNP; escala de laboratório	Muito relevante para otimizar rosca em PA/GNP automotivo
+Villmow et al., Composites Sci. Technol.	2010	Artigo	PCL/MWCNT	Masterbatch por twin screw	Kneading, mixing, back-conveying	Correlação processo–SME–dispersão	Rosca, rpm, vazão, residência, SME	Dispersão CNT, tempo de residência	Configuração e SME controlam dispersão	CNT não é grafeno, mas análogo	Forte analogia para nanocargas de alto aspecto
+Pötschke et al., Polymers	2024	Artigo	PC/MWCNT	Twin screw	Configurações com maior número de kneading blocks	Estudo experimental	SME, configuração, dispersão	Percolação, propriedades elétricas/mecânicas	Alta intensidade melhora dispersão e percolação até certo limite	Risco de dano ao CNT	Útil para entender saturação de SME e dispersão
+Lewandowski & Wilczyński, Polymers, DOI 10.3390/polym14020274	2022	Revisão/modelagem	Polímeros em TSE	Modelagem global + CFD	Elementos e zonas de processo	Modelos físicos e CFD	Transporte, fusão, fluxo, pressão	Predição de processo	Consolida fundamentos de simulação TSE	Não focado em grafeno	Base para simulação reológica/CFD
+Nastaj & Wilczyński, Polymers, DOI 10.3390/polym13101547	2021	Revisão	Extrusão de polímeros	Otimização e scale-up	Geometria de rosca e processo	Algoritmos genéticos, modelos de simulação	Vazão, rotação, temperatura, geometria	Objetivos múltiplos	GA é indicado como ferramenta poderosa	Poucos estudos em compósitos/nanocargas	Justifica otimização multiobjetivo
+Nastaj & Wilczyński, Polymers, DOI 10.3390/polym15061489	2023	Artigo	Extrusão dupla contrarrotante	TSEM + GASEOTWIN	Geometria de rosca	Algoritmo genético	Vazão, temperatura, comprimento de fusão	Funções objetivo	Otimização computacional de processo e geometria	Contrarrotante, não grafeno	Demonstra metodologia transferível
+Oldemeier & Schöppner, Polymers, DOI 10.3390/polym16212952	2024	Artigo	Mistura em TSE	CFD 3D + particle tracking	Elementos individuais	Simulação numérica	Campo de velocidade, tensão, trajetória	Mistura distributiva/dispersiva	Quantifica desempenho de elementos	Não específico para grafeno	Essencial para biblioteca digital de elementos
+Carson & Maia, Adv. Polym. Technol., DOI 10.1002/adv.21627	2017	Artigo	Mistura dispersiva	TSE com elemento extensional	Canais convergente-divergentes	CFD/validação computacional	Escoamento elongacional, pressão	Intensidade de extensão	Propõe EME dominado por extensão	Requer validação ampla em nanocargas	Excelente rota para grafeno com menor dano
+Pandey & Maia, J. Appl. Polym. Sci., DOI 10.1002/app.49765	2021	Artigo	Blendas/nanocompósitos	Pin screw + EME	Elemento extensional	Experimentos/modelagem	Vazão, mistura, quebra de fase/agregado	Dispersão, penalidade de vazão	EME melhora dispersão sem grande perda de vazão	Aplicação específica depende do material	Promissor para dispersão de GNP
+Nakayama et al., pitched-tip kneading disks	2010/2018	Simulação	Polímeros em TSE	CFD não isotérmico	Kneading disks com pontas inclinadas	Particle tracking / estatística Lagrangiana	Ângulo de disco, tip angle, transporte	Mistura, tensão, dispersão	Pontas inclinadas ajustam transporte e mistura	Parte em preprints; validar status editorial	Inspira novos elementos parametrizáveis
+Matzerath & Bonten, automated optimization of screw mixing element	2025	Artigo	Elementos de mistura	Otimização automatizada	Geometrias de elemento dispersivo/distributivo	Algoritmo genético + métricas CFD	Ângulo, fenda, comprimento, pressão	Pareto: mistura, pressão, temperatura	Otimização multiobjetivo de geometria	Não focado em grafeno	Modelo direto para P&D de novos elementos
+Takada et al., Scientific Reports, DOI 10.1038/s41598-021-03513-3	2021	Artigo	PPS/elastômero	TSE de alta velocidade	Configuração de rosca como variável de processo	Machine learning	Composição, vazão, temperatura, rpm, rosca	Morfologia/propriedades	ML reduz tentativa-e-erro em blendagem	Blenda, não nanocarga	Prova de conceito para ML em TSE
+Sarishvili et al., Plastic extrusion process optimization by digital twins	2021	Documento técnico	Extrusão plástica	Gêmeo digital híbrido	Processo, não elemento	Modelo físico + dados reais/simulados	Parâmetros de processo e qualidade	Predição e otimização	Propõe abordagem híbrida com poucos experimentos	Documento técnico; precisa validação experimental	Caminho para digital twin de compounding
+US9896565B2 / US20150267030A1 — Rutgers	2015/2018	Patente	Grafeno reforçando polímero	Exfoliação in situ no fundido	Eventos sucessivos de cisalhamento/elongação	Processo patenteado	Cisalhamento, dobramento, exfoliação	% exfoliação, tamanho <50 nm	Protege rota de geração in situ de grafeno	Reivindicações precisam análise jurídica	Alta relevância e possível risco
+US7906053B1 — Northwestern	2011	Patente	Grafite/polímero	Solid-state shear pulverization	Extrusora modificada	Processo mecanoquímico	Cisalhamento/compressão no sólido	Dispersão de grafite	Rota contínua escalável	Não é melt compounding convencional	Risco se usar SSSP
+US9790334B2 — Reliance/Xolve	2017	Patente	Polímero/grafeno	Masterbatch	Formulação/processo	—	Teor, dispersão, exfoliação	Dispersão/exfoliação	Masterbatch melhora incorporação	Status/família precisam checagem	Relevante se o projeto usar masterbatch
+4. Lacunas e oportunidades
+4.1 Lacunas tecnológicas
+
+Lacuna 1 — Pouca literatura específica sobre grafeno + geometria detalhada de rosca
+Há muitos estudos sobre grafeno em polímeros e muitos estudos sobre elementos de rosca, mas poucos conectam diretamente geometria de elemento, histórico de deformação, dispersão de grafeno, preservação de aspecto e propriedades finais.
+
+Lacuna 2 — Falta de métricas quantitativas padronizadas de dispersão
+Ainda há dependência forte de MEV/MET qualitativo. Oportunidade: criar protocolo com análise de imagem, distribuição de tamanho de aglomerados, reologia, condutividade e propriedades mecânicas correlacionadas ao histórico de deformação.
+
+Lacuna 3 — Trade-off pouco resolvido entre dispersão e degradação
+O aumento de SME melhora dispersão até certo ponto, mas pode degradar matriz e danificar nanoplaquetas. Uma oportunidade clara é otimizar para máxima dispersão com mínima quebra de aspecto e mínima degradação térmica/mecânica.
+
+Lacuna 4 — IA ainda é mais usada para processo do que para geometria de elemento
+Machine learning já aparece em controle e otimização de parâmetros de extrusão, mas o uso de IA para gerar novas geometrias de elementos de rosca ainda é emergente. A literatura de design generativo, otimização topológica e surrogate modeling em CFD pode ser transferida para esse problema.
+
+Lacuna 5 — Poucos gêmeos digitais para compounding com nanocargas
+Há propostas de digital twins para extrusão, mas ainda é raro encontrar gêmeos digitais que integrem torque, pressão, RTD, SME, reologia, dispersão de nanocargas e propriedades finais.
+
+4.2 Linhas de pesquisa promissoras
+Desenvolvimento de elemento híbrido dispersivo–extensional para grafeno
+Combinar kneading/distributive flow com zonas convergente-divergentes capazes de gerar extensão controlada.
+Biblioteca digital de elementos de rosca
+Simular elementos de transporte, kneading, reversos, dentados, extensionais e híbridos por CFD 3D, extraindo descritores: tensão máxima, taxa de cisalhamento, taxa elongacional, deformação acumulada, queda de pressão, dissipação viscosa e tempo de residência.
+Otimização multiobjetivo da sequência de rosca
+Usar algoritmos genéticos, Bayesian optimization ou reinforcement learning para selecionar sequência e posição dos elementos, balanceando dispersão, torque, pressão, SME, temperatura e degradação.
+Modelo substituto CFD + IA
+Gerar base simulada com CFD/particle tracking e treinar Gaussian processes, redes neurais ou graph neural networks para prever desempenho de novos elementos sem rodar CFD completo a cada iteração.
+Design generativo de novos elementos
+Usar parametrização geométrica ou otimização topológica para propor canais, fendas, pontas inclinadas, contrações e geometrias de fluxo elongacional.
+Validação experimental em escala piloto
+Produzir masterbatches e nanocompósitos finais em matrizes automotivas, como PP, PA6, PA66, PBT, PC/ABS ou TPU, avaliando dispersão, propriedades mecânicas, térmicas, elétricas e processabilidade.
+Proteção intelectual
+Proteger não apenas o elemento físico, mas também: método de projeto por IA, biblioteca de descritores CFD, sequência otimizada de rosca para grafeno, método de controle por torque/pressão/SME e aplicação em matrizes automotivas.
+4.3 Palavras-chave adicionais sugeridas
+“graphene nanoplatelet aspect ratio preservation”
+“specific mechanical energy graphene dispersion”
+“residence time distribution graphene twin screw extrusion”
+“accumulated strain polymer nanocomposite extrusion”
+“finite-time Lyapunov exponent twin screw mixing”
+“particle tracking twin screw extrusion mixing”
+“extensional flow graphene nanoplatelet dispersion”
+“hyperbolic converging diverging mixing element”
+“screw element sequence optimization”
+“self-wiping twin screw CFD”
+“physics-informed surrogate extrusion”
+“active learning extrusion optimization”
+“multi-objective optimization screw configuration”
+“AI-assisted screw element design”
+“graph neural network mechanical design”
+“topology optimization static mixer”
+“Bayesian optimization polymer compounding”
+“digital twin nanocomposite extrusion”
+Conclusão técnica
+
+O tema possui maturidade industrial moderada a alta para produção de nanocompósitos por melt compounding em extrusão dupla rosca. A utilização de grafeno, GNP, GO, CNT e nanocargas lamelares em polímeros já está bem documentada, e a influência de rpm, temperatura, tempo de residência, SME e configuração de rosca é evidência consolidada.
+
+A oportunidade mais forte de P&D está em um nível acima: projetar novos elementos de rosca e novas sequências de processo com apoio de CFD, reologia, IA e otimização multiobjetivo, tendo como função objetivo não apenas “misturar mais”, mas dispersar grafeno com menor degradação, menor dano ao aspecto das nanoplaquetas, menor torque e melhor desempenho automotivo final.
+
+A frente de IA para desenho de novos elementos ainda parece emergente, especialmente quando conectada diretamente a grafeno e nanocompósitos. Isso sugere espaço técnico e potencial de propriedade intelectual, desde que o projeto evite sobreposição com patentes ativas sobre exfoliação in situ, masterbatch e rotas específicas de dispersão de grafeno. Em termos de maturidade, a rota de extrusão está próxima de TRL 6–8, enquanto o desenvolvimento de elementos de rosca guiado por IA para grafeno parece mais próximo de TRL 2–4, com boa oportunidade de avanço para TRL 5–6 por validação piloto.

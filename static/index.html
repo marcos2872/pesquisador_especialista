@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Plataforma de Pesquisa com IA</title>
+        <style>
+            :root {
+                color-scheme: light dark;
+                --bg: #0f172a;
+                --card: #111827;
+                --line: #334155;
+                --text: #e5e7eb;
+                --muted: #94a3b8;
+                --accent: #22d3ee;
+            }
+            body {
+                margin: 0;
+                font-family:
+                    Inter,
+                    system-ui,
+                    -apple-system,
+                    Segoe UI,
+                    Roboto,
+                    sans-serif;
+                background: var(--bg);
+                color: var(--text);
+            }
+            .container {
+                max-width: 960px;
+                margin: 36px auto;
+                padding: 0 16px;
+            }
+            .card {
+                background: var(--card);
+                border: 1px solid var(--line);
+                border-radius: 12px;
+                padding: 20px;
+            }
+            h1 {
+                margin: 0 0 8px;
+                font-size: 1.4rem;
+            }
+            p {
+                margin: 0 0 16px;
+                color: var(--muted);
+            }
+            textarea {
+                width: 100%;
+                min-height: 110px;
+                background: #0b1220;
+                color: var(--text);
+                border: 1px solid var(--line);
+                border-radius: 8px;
+                padding: 10px 12px;
+                font: inherit;
+                resize: vertical;
+                box-sizing: border-box;
+            }
+            .actions {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-top: 12px;
+            }
+            .result-actions {
+                display: flex;
+                justify-content: flex-end;
+                margin-bottom: 8px;
+            }
+            button {
+                background: var(--accent);
+                color: #001018;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 14px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+            button:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+            .status {
+                color: var(--muted);
+                font-size: 0.95rem;
+            }
+            pre {
+                margin: 0;
+                background: #020617;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                padding: 14px;
+                white-space: pre-wrap;
+                line-height: 1.45;
+            }
+            .result {
+                margin-top: 20px;
+            }
+            .markdown {
+                margin: 0;
+                background: #020617;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                padding: 14px;
+                line-height: 1.5;
+            }
+            .markdown h1,
+            .markdown h2,
+            .markdown h3 {
+                margin: 0.8em 0 0.4em;
+            }
+            .markdown p,
+            .markdown li {
+                margin: 0.35em 0;
+            }
+            .markdown table {
+                width: 100%;
+                border-collapse: collapse;
+                display: block;
+                overflow-x: auto;
+            }
+            .markdown th,
+            .markdown td {
+                border: 1px solid var(--line);
+                padding: 6px 8px;
+                text-align: left;
+            }
+            .markdown code {
+                background: #111827;
+                padding: 1px 4px;
+                border-radius: 4px;
+            }
+            .markdown a {
+                color: #67e8f9;
+                text-decoration: underline;
+                word-break: break-all;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="card">
+                <h1>Plataforma de Pesquisa com IA</h1>
+                <p>
+                    Digite o tópico da pesquisa. A IA retorna o relatório
+                    técnico completo no formato: estado da arte, patentes,
+                    tabela comparativa, lacunas e conclusão, com fonte em cada
+                    trecho.
+                </p>
+                <textarea
+                    id="topic"
+                    placeholder="Ex.: nanocompósitos polímero/grafeno para aplicação automotiva"
+                ></textarea>
+                <div class="actions">
+                    <button id="run">Gerar pesquisa</button>
+                    <span class="status" id="status">Pronto.</span>
+                </div>
+            </div>
+            <div class="result">
+                <div class="result-actions">
+                    <button id="copy" type="button">Copiar markdown</button>
+                </div>
+                <div id="output" class="markdown">
+                    Resultado em Markdown aparecerá aqui.
+                </div>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+        <script>
+            const runButton = document.getElementById("run");
+            const copyButton = document.getElementById("copy");
+            const topicInput = document.getElementById("topic");
+            const statusText = document.getElementById("status");
+            const output = document.getElementById("output");
+            let lastMarkdown = "";
+
+            function escapeHtml(text) {
+                return text
+                    .replaceAll("&", "&amp;")
+                    .replaceAll("<", "&lt;")
+                    .replaceAll(">", "&gt;");
+            }
+
+            function normalizeCitationLinks(markdownText) {
+                return (markdownText || "").replace(
+                    /\[Fonte:\s*([^\]]+)\]/g,
+                    (_match, rawSources) => {
+                        const links = rawSources
+                            .split(";")
+                            .map((s) => s.trim())
+                            .filter(Boolean)
+                            .map((s) => s.replace(/[)\].,;]+$/g, ""))
+                            .filter((s) => /^https?:\/\//i.test(s))
+                            .map(
+                                (url, index) => `[Fonte ${index + 1}](${url})`,
+                            );
+                        return links.length
+                            ? links.join("; ")
+                            : "[sem fonte válida]";
+                    },
+                );
+            }
+
+            function setLinkBehavior() {
+                output.querySelectorAll("a").forEach((a) => {
+                    a.target = "_blank";
+                    a.rel = "noopener noreferrer";
+                });
+            }
+
+            function renderMarkdown(markdownText) {
+                const normalized = normalizeCitationLinks(markdownText);
+                if (window.marked && window.DOMPurify) {
+                    const html = window.marked.parse(normalized || "");
+                    return window.DOMPurify.sanitize(html);
+                }
+                return `<pre>${escapeHtml(normalized || "")}</pre>`;
+            }
+
+            async function runResearch() {
+                const topic = topicInput.value.trim();
+                if (!topic) {
+                    statusText.textContent = "Informe um tópico de pesquisa.";
+                    return;
+                }
+
+                runButton.disabled = true;
+                statusText.textContent = "Gerando relatório...";
+                output.textContent = "";
+                copyButton.disabled = true;
+
+                try {
+                    const response = await fetch("/api/research", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ topic }),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(
+                            data.error || "Falha ao gerar pesquisa.",
+                        );
+                    }
+                    lastMarkdown = data.report || "Sem conteúdo retornado.";
+                    output.innerHTML = renderMarkdown(lastMarkdown);
+                    setLinkBehavior();
+                    statusText.textContent = "Pesquisa concluída.";
+                    copyButton.disabled = false;
+                } catch (error) {
+                    lastMarkdown = "";
+                    output.textContent = "";
+                    statusText.textContent = `Erro: ${error.message}`;
+                    copyButton.disabled = true;
+                } finally {
+                    runButton.disabled = false;
+                }
+            }
+
+            async function copyMarkdown() {
+                if (!lastMarkdown) {
+                    statusText.textContent = "Nada para copiar ainda.";
+                    return;
+                }
+                try {
+                    await navigator.clipboard.writeText(lastMarkdown);
+                    statusText.textContent = "Markdown copiado.";
+                } catch {
+                    statusText.textContent = "Falha ao copiar.";
+                }
+            }
+
+            runButton.addEventListener("click", runResearch);
+            copyButton.addEventListener("click", copyMarkdown);
+            copyButton.disabled = true;
+        </script>
+    </body>
+</html>
