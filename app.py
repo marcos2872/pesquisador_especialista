@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
+
+from utils.fetcher import validate_url_relevance
+from utils.search.academic import search_articles
+from utils.search.patents import search_patents
+from utils.search.prompt_enrichment import build_sources_context
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,10 +30,13 @@ def load_prompt_template() -> str:
 
 
 PROMPT_TEMPLATE = load_prompt_template()
+MARKDOWN_LINK_PATTERN = re.compile(r"\[[^\]]+\]\((https?://[^)\s]+)\)")
+SEARCH_QUERY_KEYS = {"q", "query", "search", "keyword", "keywords", "term"}
+MIN_UNIQUE_SOURCES = 3
 
 
-def build_user_prompt(topic: str) -> str:
-    return (
+def build_user_prompt(topic: str, sources_context: str = "") -> str:
+    base = (
         f"Tema da pesquisa: {topic}\n\n"
         "Execute a pesquisa técnica e entregue exatamente nesta estrutura:\n"
         "1. Estado da arte técnico-científico\n"
@@ -37,6 +47,15 @@ def build_user_prompt(topic: str) -> str:
         "6. Referências utilizadas (links)\n\n"
         "FORMATO OBRIGATÓRIO: responda em Markdown (GitHub Flavored Markdown).\n"
         "Use português técnico e inclua obrigatoriamente links diretos/DOI/número de patente.\n"
+        "É PROIBIDO citar links de páginas de busca, homepages ou listagens.\n"
+        "Exemplos PROIBIDOS: https://scholar.google.com, https://www.scopus.com, https://www.sciencedirect.com,\n"
+        "https://worldwide.espacenet.com, https://patents.google.com (sem número de patente), https://www.uspto.gov.\n"
+        "Use apenas links diretos do artigo/documento/patente que fundamenta cada afirmação, por exemplo:\n"
+        "https://doi.org/10.xxxx/xxxxx ou https://patents.google.com/patent/US12345678A1/en.\n"
+        "NÃO invente dados, números, resultados experimentais, autores, anos, títulos, DOIs ou números de patente.\n"
+        "NÃO invente URLs ou DOIs plausíveis: cite somente fontes que você conhece e consegue referenciar com precisão.\n"
+        "Se não houver fonte confiável para uma afirmação, não faça a afirmação.\n"
+        "Se a base confiável for insuficiente para responder o tema, declare explicitamente essa limitação.\n"
         "NÃO escreva avisos operacionais como 'Falha operacional', 'sem acesso MCP' ou similares.\n"
         "NÃO diga que usou ferramentas que não usou.\n"
         "Priorize fontes de 2016 até hoje; se usar referência anterior, marque como [Fundacional] "
@@ -46,36 +65,9 @@ def build_user_prompt(topic: str) -> str:
         "Na tabela comparativa, adicione uma coluna 'Fonte (link/DOI/patente)'.\n"
         "Na seção 6, liste somente as fontes realmente citadas no texto."
     )
-
-
-def generate_demo_report(topic: str) -> str:
-    return (
-        f"# Pesquisa técnica: {topic}\n\n"
-        "1. Estado da arte técnico-científico\n"
-        "- Modo demonstração ativo (sem provedor de IA configurado). "
-        "[Fonte](https://scholar.google.com/)\n"
-        "- Estruture este bloco com panorama histórico, abordagens e limitações. "
-        "[Fonte](https://www.sciencedirect.com/)\n\n"
-        "2. Pesquisa de anterioridade/patentes\n"
-        "- Liste documentos por jurisdição (BR/US/EP/WO), com número, ano e titular. "
-        "[Fonte](https://worldwide.espacenet.com/)\n\n"
-        "3. Tabela comparativa\n"
-        "| Referência/Patente | Ano | Método | Principais resultados | Limitações | Fonte (link/DOI/patente) |\n"
-        "|---|---:|---|---|---|---|\n"
-        "| Exemplo | 2024 | Revisão | Resultado resumido | Limitação resumida | https://doi.org/xx.xxxx/xxxxx |\n\n"
-        "4. Lacunas e oportunidades\n"
-        "- Identifique gaps técnicos, riscos de sobreposição e linhas de P&D. "
-        "[Fonte](https://patentscope.wipo.int/)\n\n"
-        "5. Conclusão técnica\n"
-        "- Defina maturidade tecnológica e próximos passos prioritários. "
-        "[Fonte](https://link.springer.com/)\n\n"
-        "6. Referências utilizadas (links)\n"
-        "- https://scholar.google.com/\n"
-        "- https://worldwide.espacenet.com/\n"
-        "- https://patentscope.wipo.int/\n\n"
-        "**Para ativar IA real:** configure `OPENAI_API_KEY` (e opcionalmente `OPENAI_MODEL`) "
-        "e `OPENAI_BASE_URL` quando usar Azure."
-    )
+    if sources_context:
+        return f"{base}\n\n--- CONTEXTO DE FONTES VERIFICADAS ---\n{sources_context}\n---\nUse SOMENTE as fontes do contexto acima para embasar o relatório. Não adicione fontes externas.\n"
+    return base
 
 
 def extract_openai_text(data: dict) -> str:
@@ -122,18 +114,139 @@ def extract_openai_text(data: dict) -> str:
     return ""
 
 
-def call_openai(topic: str) -> str:
+def _is_search_or_home_url(url: str) -> bool:
+    parsed = urlparse(url)
+    path = parsed.path or "/"
+    normalized_path = path.rstrip("/")
+    lower_path = normalized_path.lower()
+    lower_host = parsed.netloc.lower()
+    query_keys = {key.lower() for key in parse_qs(parsed.query).keys()}
+
+    if normalized_path in ("",):
+        return True
+    if any(token in lower_path for token in ("/search", "/scholar", "/results", "/query")):
+        return True
+    if lower_host == "scholar.google.com":
+        return True
+    if query_keys & SEARCH_QUERY_KEYS and not any(
+        token in lower_path for token in ("/article", "/doi", "/patent", "/document", "/pdf")
+    ):
+        return True
+    return False
+
+
+def _looks_like_primary_source(url: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    if "doi.org/" in url.lower():
+        return True
+    if any(token in path for token in ("/article", "/doi", "/abs", "/full", "/pdf", "/patent", "/document")):
+        return True
+    if host in {"patents.google.com", "worldwide.espacenet.com", "patentscope.wipo.int"} and path.strip("/"):
+        return True
+    return False
+
+
+def validate_report_sources(report: str) -> None:
+    urls = MARKDOWN_LINK_PATTERN.findall(report)
+    if not urls:
+        raise RuntimeError(
+            "A resposta não trouxe links de fontes. Exija links diretos de artigos/patentes citados."
+        )
+
+    if not any(_looks_like_primary_source(url) for url in urls):
+        raise RuntimeError(
+            "A resposta não trouxe links diretos de artigo/documento/patente. "
+            "Inclua DOI ou URL do documento final."
+        )
+
+
+
+def _count_unique_sources(report: str) -> int:
+    urls = MARKDOWN_LINK_PATTERN.findall(report)
+    return len({url.lower() for url in urls})
+
+
+def sanitize_report_links(report: str, topic: str) -> tuple[str, list[str]]:
+    """
+    Verifica URLs do relatório contra o tema e remove/substui links quebrados
+    ou irrelevantes por '[fonte não verificada]'.
+
+    Retorna o relatório sanitizado e a lista de URLs removidos com motivo.
+    """
+    # Remove marcações de "sem validação externa" que o modelo possa ter usado.
+    report = re.sub(r"\[sem validação externa\]", "", report, flags=re.IGNORECASE)
+
+    urls = list(dict.fromkeys(MARKDOWN_LINK_PATTERN.findall(report)))
+    if not urls:
+        return report, []
+
+    valid_urls: set[str] = set()
+    removed: list[str] = []
+
+    for url in urls:
+        if _is_search_or_home_url(url):
+            removed.append(f"{url} (link de busca/homepage)")
+            continue
+
+        is_valid, reason = validate_url_relevance(url, topic, timeout=15)
+        if is_valid:
+            valid_urls.add(url)
+        else:
+            removed.append(f"{url} ({reason})")
+
+    if not removed:
+        return report, []
+
+    # Substitui ocorrências de links inválidos no corpo do texto.
+    # Preserva o texto do link, mas substitui a URL por '[fonte não verificada]'.
+    sanitized = report
+    for url in urls:
+        if url not in valid_urls:
+            sanitized = re.sub(
+                rf"\[([^\]]+)\]\(\s*{re.escape(url)}\s*\)",
+                r"[\1] [fonte não verificada]",
+                sanitized,
+            )
+
+    # Reconstrói a seção 6 de referências, mantendo apenas links válidos.
+    # Remove qualquer seção de referências existente no final e reinsere a lista limpa.
+    reference_header_pattern = re.compile(
+        r"\n##\s+6\.\s+Referências.*", re.IGNORECASE | re.DOTALL
+    )
+    sanitized = reference_header_pattern.sub("", sanitized)
+    sanitized = sanitized.rstrip()
+
+    if valid_urls:
+        sanitized += "\n\n## 6. Referências utilizadas (links verificados)\n\n"
+        sanitized += "\n".join(f"- {url}" for url in sorted(valid_urls))
+    else:
+        sanitized += (
+            "\n\n## 6. Referências utilizadas\n\n"
+            "_Nenhuma das fontes citadas pôde ser verificada automaticamente. "
+            "Recomenda-se busca manual em bases confiáveis._"
+        )
+
+    return sanitized, removed
+
+
+def call_openai(topic: str, sources_context: str = "", retry: bool = False) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY não configurada.")
 
+    if retry:
+        user_content = build_retry_prompt(topic)
+    else:
+        user_content = build_user_prompt(topic, sources_context=sources_context)
     payload = {
         "model": model,
         "input": [
             {"role": "system", "content": PROMPT_TEMPLATE},
-            {"role": "user", "content": build_user_prompt(topic)},
+            {"role": "user", "content": user_content},
         ],
     }
     is_azure = ".openai.azure.com" in base_url
@@ -176,10 +289,80 @@ def call_openai(topic: str) -> str:
     )
 
 
+def build_retry_prompt(topic: str) -> str:
+    return (
+        f"Tema da pesquisa: {topic}\n\n"
+        "A tentativa anterior falhou porque os links fornecidos não puderam ser "
+        "verificados como fontes reais e relevantes ao tema.\n\n"
+        "Execute a pesquisa novamente, mas desta vez:\n"
+        "- Cite APENAS fontes que você conhece com certeza e consegue referenciar com precisão.\n"
+        "- NÃO invente DOIs, números de patente, títulos, autores ou URLs.\n"
+        "- NÃO use links de homepages de bases de dados (ex.: https://worldwide.espacenet.com sem número de patente).\n"
+        "- Use SOMENTE links diretos: https://doi.org/10.xxxx/xxxxx ou https://patents.google.com/patent/NUMERO/en.\n"
+        "- Prefira DOIs de artigos consolidados e patentes de jurisdições principais (US/EP/WO) que você saiba que existem.\n"
+        "- Se não souber uma fonte específica, reduza o escopo do parágrafo ou omita a afirmação.\n"
+        "- Entregue exatamente a mesma estrutura de 6 seções.\n"
+        "- Use obrigatoriamente links diretos no formato [Fonte](URL/DOI/patente).\n"
+        "- Seção 6 deve listar somente as fontes realmente citadas no texto."
+    )
+
+
+def _collect_real_sources(topic: str) -> str:
+    """Coleta fontes reais via APIs gratuitas e retorna o contexto formatado."""
+    if os.getenv("ENABLE_REAL_SEARCH", "1") == "0":
+        return ""
+
+    articles: list = []
+    patents: list = []
+    try:
+        articles = search_articles(topic, max_results=5, timeout=15)
+    except Exception:
+        articles = []
+    try:
+        patents = search_patents(topic, max_results=3, timeout=15)
+    except Exception:
+        patents = []
+
+    return build_sources_context(articles, patents) or ""
+
+
 def generate_report(topic: str) -> str:
-    if os.getenv("OPENAI_API_KEY"):
-        return call_openai(topic)
-    return generate_demo_report(topic)
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError(
+            "Pesquisa confiável indisponível sem `OPENAI_API_KEY`. "
+            "Configure um provedor para gerar resposta baseada em fontes verificáveis."
+        )
+
+    sources_context = _collect_real_sources(topic)
+
+    def _try_generate(retry: bool = False) -> tuple[str, list[str]]:
+        report = call_openai(topic, sources_context=sources_context, retry=retry)
+        validate_report_sources(report)
+        sanitized, removed = sanitize_report_links(report, topic)
+        return sanitized, removed
+
+    sanitized_report, removed = _try_generate(retry=False)
+
+    if _count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
+        sanitized_report, removed = _try_generate(retry=True)
+
+    if _count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
+        raise RuntimeError(
+            "A resposta trouxe poucas fontes que puderam ser verificadas como reais e relevantes. "
+            f"Use pelo menos {MIN_UNIQUE_SOURCES} fontes distintas e confiáveis, "
+            "ou integre uma ferramenta de busca real (ex.: Crossref, SerpAPI) para obter referências verificadas."
+        )
+
+    if removed:
+        warning = (
+            "> **Aviso de validação de fontes:** alguns links gerados pelo modelo "
+            "não foram confirmados como válidos ou relevantes ao tema e foram "
+            "substituídos por `[fonte não verificada]`. "
+            "Recomenda-se revisão manual das referências.\n\n"
+        )
+        sanitized_report = warning + sanitized_report
+
+    return sanitized_report
 
 
 class Handler(BaseHTTPRequestHandler):
