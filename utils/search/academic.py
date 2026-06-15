@@ -393,7 +393,10 @@ def search_articles(
       3. arXiv (gratis, sem cadastro)
       4. Core.ac.uk (gratis, sem cadastro)
       5. Semantic Scholar (gratis com chave opcional SEMANTIC_SCHOLAR_API_KEY)
+      6. IEEE Xplore (gratis com chave opcional IEEE_API_KEY)
     """
+    from .ieee import search_ieee as _search_ieee_provider
+
     collected: list[Article] = []
     per_provider = max(3, max_results * 2)
     target = max_results * 2
@@ -404,6 +407,7 @@ def search_articles(
         _search_arxiv,
         _search_core,
         _search_semantic_scholar,
+        _search_ieee_provider,
     ):
         if len(_dedup_articles(collected)) >= target:
             break

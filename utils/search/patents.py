@@ -389,8 +389,11 @@ def search_patents(
       1. Espacenet OPS (gratis com EPO_OPS_CONSUMER_KEY/SECRET)
       2. USPTO (gratis com USPTO_API_KEY)
       3. Lens.org (gratis com LENS_API_TOKEN)
-      4. PatentsView (gratis, sem cadastro; atualmente descontinuado)
+      4. WIPO Patentscope (gratis com WIPO_API_KEY)
+      5. PatentsView (gratis, sem cadastro; atualmente descontinuado)
     """
+    from .wipo import search_wipo as _search_wipo_provider
+
     collected: list[Patent] = []
     per_provider = max(3, max_results * 2)
 
@@ -398,6 +401,7 @@ def search_patents(
         _search_epo_ops,
         _search_uspto,
         _search_lens,
+        _search_wipo_provider,
         _search_patentsview,
     ):
         if len(_dedup_patents(collected)) >= max_results * 2:

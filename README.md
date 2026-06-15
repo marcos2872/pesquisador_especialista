@@ -62,9 +62,18 @@ A plataforma busca artigos e patentes em várias APIs gratuitas para reduzir a a
 |---|---|---|
 | **Semantic Scholar** | Artigos com metadados ricos (recomendado; sem chave há rate limit) | https://www.semanticscholar.org/product/api |
 | **Unpaywall** | Enriquecer com link de PDF gratuito (só precisa de um email) | https://unpaywall.org/products/api |
+| **IEEE Xplore** | Artigos de CS, IA, eletrônica, controle | https://developer.ieee.org/ |
 | **USPTO Open Data** | Patentes americanas | https://data.uspto.gov/apis/patent-data-api |
 | **Espacenet OPS (EPO)** | Patentes europeias e mundiais | https://developers.epo.org/ |
 | **Lens.org** | Artigos + patentes cruzados (uso acadêmico) | https://www.lens.org/lens/api |
+| **WIPO Patentscope** | Patentes internacionais (PCT) | https://patentscope.wipo.int/ |
+
+### Por que não há scripts para Scopus / Web of Science / ScienceDirect / SpringerLink / Wiley / Google Patents
+
+- **Scopus, Web of Science, ScienceDirect, SpringerLink, Wiley** — exigem credenciais institucionais (login de universidade) e/ou têm APIs **comerciais pagas** (Elsevier, Wiley, Springer Nature) sem tier gratuito viável. Não há busca automatizada possível sem essas credenciais.
+- **Google Patents** — não tem API oficial pública; scraping de resultados via `curl` retorna apenas HTML estático (os resultados são renderizados via JavaScript) e viola os Termos de Serviço do Google.
+
+A alternativa prática é usar as APIs já integradas (Crossref, OpenAlex, Unpaywall), que cobrem o mesmo conteúdo de forma gratuita e legal.
 
 ### Exemplo de `.env` completo
 
@@ -83,10 +92,12 @@ OPENAI_TIMEOUT_SECONDS=240
 OPENALEX_USER_AGENT=mailto:seu-email@dominio.com
 UNPAYWALL_EMAIL=seu-email@dominio.com
 SEMANTIC_SCHOLAR_API_KEY=
+IEEE_API_KEY=
 USPTO_API_KEY=
 EPO_OPS_CONSUMER_KEY=
 EPO_OPS_CONSUMER_SECRET=
 LENS_API_TOKEN=
+WIPO_API_KEY=
 
 # Timeout e comportamento da busca
 SEARCH_TIMEOUT_SECONDS=30
