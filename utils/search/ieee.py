@@ -4,36 +4,16 @@ Busca de artigos no IEEE Xplore via API oficial.
 Requer cadastro gratuito em https://developer.ieee.org/ para obter a chave.
 """
 
-import json
 import os
 from typing import Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from .academic import Article
+from models.article import Article
+from utils.http_client import http_get_json
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RESULTS = 5
 _IEEE_BASE = "https://ieeexploreapi.ieee.org/api/v1/search/articles"
-_MAX_RETRIES = 2
-
-
-def _http_get_json(url: str, timeout: int) -> Optional[dict]:
-    import time
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
 
 
 def search_ieee(
@@ -57,7 +37,7 @@ def search_ieee(
         "sort_order": "desc",
     })
     url = f"{_IEEE_BASE}?{params}"
-    data = _http_get_json(url, timeout)
+    data = http_get_json(url, timeout=timeout)
     if not data:
         return []
 

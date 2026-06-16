@@ -4,14 +4,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app import (
-    _collect_real_sources,
-    build_user_prompt,
-    extract_openai_text,
-    sanitize_report_links,
-    validate_report_sources,
-)
-from utils.search.academic import Article
+from services.research_service import _collect_real_sources
+from config import build_user_prompt
+from services.ai_service import extract_openai_text
+from services.report_service import sanitize_report_links
+from services.source_service import validate_report_sources
+from models.article import Article
 
 
 def test_collect_real_sources_returns_context_with_articles():
@@ -23,8 +21,8 @@ def test_collect_real_sources_returns_context_with_articles():
         year=2020,
     )
     with (
-        patch("app.search_articles", return_value=[a]),
-        patch("app.search_patents", return_value=[]),
+        patch("services.source_collector.search_articles", return_value=[a]),
+        patch("services.source_collector.search_patents", return_value=[]),
         patch(
             "utils.fetcher.download_source_texts",
             return_value=[
@@ -32,6 +30,7 @@ def test_collect_real_sources_returns_context_with_articles():
             ],
         ),
         patch("utils.fetcher.generate_query_variants", return_value=["test"]),
+        patch.dict("os.environ", {"SEARCH_QUERY_DELAY_SECONDS": "0"}),
     ):
         ctx, snippets = _collect_real_sources("test")
     assert "ARTIGOS:" in ctx
@@ -40,8 +39,8 @@ def test_collect_real_sources_returns_context_with_articles():
 
 
 def test_collect_real_sources_returns_empty_when_disabled():
-    with patch.dict("os.environ", {"ENABLE_REAL_SEARCH": "0"}):
-        with patch("app.search_articles") as sa, patch("app.search_patents") as sp:
+    with patch.dict("os.environ", {"ENABLE_REAL_SEARCH": "0", "SEARCH_QUERY_DELAY_SECONDS": "0"}):
+        with patch("services.source_collector.search_articles") as sa, patch("services.source_collector.search_patents") as sp:
             ctx, snippets = _collect_real_sources("test")
     assert ctx == ""
     assert snippets == {}
@@ -51,9 +50,10 @@ def test_collect_real_sources_returns_empty_when_disabled():
 
 def test_collect_real_sources_handles_exceptions_gracefully():
     with (
-        patch("app.search_articles", side_effect=RuntimeError("boom")),
-        patch("app.search_patents", side_effect=RuntimeError("boom")),
+        patch("services.source_collector.search_articles", side_effect=RuntimeError("boom")),
+        patch("services.source_collector.search_patents", side_effect=RuntimeError("boom")),
         patch("utils.fetcher.generate_query_variants", return_value=["test"]),
+        patch.dict("os.environ", {"SEARCH_QUERY_DELAY_SECONDS": "0"}),
     ):
         ctx, snippets = _collect_real_sources("test")
     assert ctx == ""
@@ -154,7 +154,7 @@ def test_validate_report_sources_rejects_search_links_only():
 
 
 def test_sanitize_report_links_keeps_valid_urls():
-    with patch("app.validate_url_relevance", return_value=(True, "")):
+    with patch("services.report_service.validate_url_relevance", return_value=(True, "")):
         report = "Texto com [Fonte](https://doi.org/10.1234/test)."
         sanitized, removed = sanitize_report_links(report, "test topic")
     assert "https://doi.org/10.1234/test" in sanitized
@@ -169,7 +169,7 @@ def test_sanitize_report_links_removes_search_urls():
 
 
 def test_sanitize_report_links_removes_invalid_urls():
-    with patch("app.validate_url_relevance", return_value=(False, "timeout")):
+    with patch("services.report_service.validate_url_relevance", return_value=(False, "timeout")):
         report = "Texto com [Fonte](https://example.com/article)."
         sanitized, removed = sanitize_report_links(report, "test topic")
     assert "fonte não verificada" in sanitized
@@ -179,7 +179,7 @@ def test_sanitize_report_links_removes_invalid_urls():
 def test_sanitize_report_links_rebuilds_reference_section():
     # A seção 6 só é reconstruída quando há URLs removidos.
     # Usamos um link de busca que será removido + um DOI válido.
-    with patch("app.validate_url_relevance", return_value=(True, "")):
+    with patch("services.report_service.validate_url_relevance", return_value=(True, "")):
         report = (
             "Texto com [Fonte](https://scholar.google.com/) e "
             "[Fonte](https://doi.org/10.1/a).\n\n"
@@ -198,6 +198,6 @@ def test_sanitize_report_links_rebuilds_reference_section():
 
 def test_sanitize_report_links_removes_no_validation_markers():
     report = "Texto [sem validação externa] com [Fonte](https://doi.org/10.1/x)."
-    with patch("app.validate_url_relevance", return_value=(True, "")):
+    with patch("services.report_service.validate_url_relevance", return_value=(True, "")):
         sanitized, _ = sanitize_report_links(report, "test")
     assert "[sem validação externa]" not in sanitized

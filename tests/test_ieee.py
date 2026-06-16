@@ -30,7 +30,7 @@ def test_search_ieee_parses_response():
         ]
     }
     with patch.dict("os.environ", {"IEEE_API_KEY": "fake-key"}), \
-         patch("utils.search.ieee._http_get_json", return_value=response):
+         patch("utils.search.ieee.http_get_json", return_value=response):
         articles = search_ieee("screw extruder", 3, 5)
     assert len(articles) == 1
     a = articles[0]
@@ -54,7 +54,7 @@ def test_search_ieee_falls_back_to_document_url_when_no_doi():
         ]
     }
     with patch.dict("os.environ", {"IEEE_API_KEY": "fake-key"}), \
-         patch("utils.search.ieee._http_get_json", return_value=response):
+         patch("utils.search.ieee.http_get_json", return_value=response):
         articles = search_ieee("test", 3, 5)
     assert articles[0].url == "https://ieeexplore.ieee.org/document/9999999"
     assert articles[0].doi is None
@@ -62,11 +62,11 @@ def test_search_ieee_falls_back_to_document_url_when_no_doi():
 
 def test_search_ieee_handles_empty_response():
     with patch.dict("os.environ", {"IEEE_API_KEY": "fake-key"}), \
-         patch("utils.search.ieee._http_get_json", return_value={}):
+         patch("utils.search.ieee.http_get_json", return_value={}):
         assert search_ieee("test", 3, 5) == []
 
 
 def test_search_ieee_returns_empty_when_request_fails():
     with patch.dict("os.environ", {"IEEE_API_KEY": "fake-key"}), \
-         patch("utils.search.ieee._http_get_json", return_value=None):
+         patch("utils.search.ieee.http_get_json", return_value=None):
         assert search_ieee("test", 3, 5) == []

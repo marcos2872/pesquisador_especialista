@@ -4,38 +4,18 @@ Busca no Google Scholar e Google Patents via SerpAPI.
 Requer cadastro em https://serpapi.com para obter a chave de API.
 """
 
-import json
 import os
 import re
-import time
 from typing import Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
-from .academic import Article
-from .patents import Patent
+from models.article import Article
+from models.patent import Patent
+from utils.http_client import http_get_json
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RESULTS = 5
 _SERPAPI_BASE = "https://serpapi.com/search"
-_MAX_RETRIES = 2
-
-
-def _http_get_json(url: str, timeout: int) -> Optional[dict]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
 
 
 def _build_url(engine: str, topic: str, max_results: int) -> str:
@@ -59,7 +39,7 @@ def search_google_scholar(
         return []
 
     url = _build_url("google_scholar", topic, max_results)
-    data = _http_get_json(url, timeout)
+    data = http_get_json(url, timeout=timeout)
     if not data:
         return []
 
@@ -118,7 +98,7 @@ def search_google_patents(
         return []
 
     url = _build_url("google_patents", topic, max_results)
-    data = _http_get_json(url, timeout)
+    data = http_get_json(url, timeout=timeout)
     if not data:
         return []
 

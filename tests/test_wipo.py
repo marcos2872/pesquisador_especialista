@@ -25,7 +25,7 @@ def test_search_wipo_parses_response():
         ]
     }
     with patch.dict("os.environ", {"WIPO_API_KEY": "fake-key"}), \
-         patch("utils.search.wipo._http_post_json", return_value=response):
+         patch("utils.search.wipo.http_post_json", return_value=response):
         patents = search_wipo("screw extruder", 3, 5)
     assert len(patents) == 1
     p = patents[0]
@@ -50,7 +50,7 @@ def test_search_wipo_handles_alternative_field_names():
         ]
     }
     with patch.dict("os.environ", {"WIPO_API_KEY": "fake-key"}), \
-         patch("utils.search.wipo._http_post_json", return_value=response):
+         patch("utils.search.wipo.http_post_json", return_value=response):
         patents = search_wipo("test", 3, 5)
     assert patents[0].title == "Alt Field Patent"
     assert patents[0].number == "WO2024/999999A1"
@@ -65,7 +65,7 @@ def test_search_wipo_skips_patents_without_number():
         ]
     }
     with patch.dict("os.environ", {"WIPO_API_KEY": "fake-key"}), \
-         patch("utils.search.wipo._http_post_json", return_value=response):
+         patch("utils.search.wipo.http_post_json", return_value=response):
         patents = search_wipo("test", 3, 5)
     assert len(patents) == 1
     assert patents[0].number == "WO2024/000001A1"
@@ -73,5 +73,5 @@ def test_search_wipo_skips_patents_without_number():
 
 def test_search_wipo_returns_empty_when_request_fails():
     with patch.dict("os.environ", {"WIPO_API_KEY": "fake-key"}), \
-         patch("utils.search.wipo._http_post_json", return_value=None):
+         patch("utils.search.wipo.http_post_json", return_value=None):
         assert search_wipo("test", 3, 5) == []

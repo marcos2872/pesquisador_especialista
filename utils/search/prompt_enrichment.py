@@ -11,8 +11,8 @@ permitir citações com "..." baseadas no texto real dos documentos.
 import os
 from typing import Optional
 
-from .academic import Article
-from .patents import Patent
+from models.article import Article
+from models.patent import Patent
 
 DEFAULT_MAX_ARTICLES = int(os.getenv("SOURCES_MAX_ARTICLES", "50"))
 DEFAULT_MAX_PATENTS = int(os.getenv("SOURCES_MAX_PATENTS", "30"))

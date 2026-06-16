@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from app import _is_search_or_home_url, _looks_like_primary_source
+from services.source_service import _is_search_or_home_url, _looks_like_primary_source
 from utils.fetcher import (
     _deduplicate_snippets,
     _extract_keywords,

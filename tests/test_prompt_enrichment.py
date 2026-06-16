@@ -1,7 +1,7 @@
 """Testes para utils.search.prompt_enrichment."""
 
-from utils.search.academic import Article
-from utils.search.patents import Patent
+from models.article import Article
+from models.patent import Patent
 from utils.search.prompt_enrichment import build_sources_context
 
 

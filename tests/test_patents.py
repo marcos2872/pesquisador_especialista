@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
+from models.patent import Patent
 from utils.search.patents import (
-    Patent,
     _dedup_patents,
     _get_epo_ops_token,
     _search_epo_ops,
@@ -36,7 +36,7 @@ def test_search_patentsview_parses_response():
             }
         ]
     }
-    with patch("utils.search.patents._http_get_json", return_value=response):
+    with patch("utils.search.patents.http_get_json", return_value=response):
         patents = _search_patentsview("test", 5, 10)
     assert len(patents) == 1
     p = patents[0]
@@ -50,7 +50,7 @@ def test_search_patentsview_parses_response():
 
 
 def test_search_patentsview_returns_empty_when_request_fails():
-    with patch("utils.search.patents._http_get_json", return_value=None):
+    with patch("utils.search.patents.http_get_json", return_value=None):
         assert _search_patentsview("test", 5, 10) == []
 
 
@@ -61,7 +61,7 @@ def test_search_patentsview_skips_patents_without_number():
             {"patent_number": "US20000000B2", "patent_title": "Valid", "patent_date": "2019-06-15"},
         ]
     }
-    with patch("utils.search.patents._http_get_json", return_value=response):
+    with patch("utils.search.patents.http_get_json", return_value=response):
         patents = _search_patentsview("test", 5, 10)
     assert len(patents) == 1
     assert patents[0].number == "US20000000B2"
@@ -117,7 +117,7 @@ def test_search_uspto_parses_response():
         ]
     }
     with patch.dict("os.environ", {"USPTO_API_KEY": "fake-key"}), \
-         patch("utils.search.patents._http_post_json", return_value=response):
+         patch("utils.search.patents.http_post_json", return_value=response):
         patents = _search_uspto("screw extruder", 3, 5)
     assert len(patents) == 1
     p = patents[0]
@@ -132,7 +132,7 @@ def test_search_uspto_parses_response():
 
 def test_search_uspto_handles_empty_results():
     with patch.dict("os.environ", {"USPTO_API_KEY": "fake-key"}), \
-         patch("utils.search.patents._http_post_json", return_value={}):
+         patch("utils.search.patents.http_post_json", return_value={}):
         assert _search_uspto("test", 3, 5) == []
 
 
@@ -154,7 +154,7 @@ def test_search_lens_parses_response():
         ]
     }
     with patch.dict("os.environ", {"LENS_API_TOKEN": "fake-token"}), \
-         patch("utils.search.patents._http_post_json", return_value=response):
+         patch("utils.search.patents.http_post_json", return_value=response):
         patents = _search_lens("screw extruder", 3, 5)
     assert len(patents) == 1
     p = patents[0]

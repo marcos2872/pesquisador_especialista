@@ -4,41 +4,16 @@ Busca de patentes no WIPO Patentscope via API.
 Requer cadastro em https://patentscope.wipo.int/ para obter a chave de API.
 """
 
-import json
 import os
 import re
-import time
 from typing import Optional
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-from .patents import Patent
+from models.patent import Patent
+from utils.http_client import http_post_json
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RESULTS = 3
 _WIPO_BASE = "https://patentscope.wipo.int/search/rest/patents"
-_MAX_RETRIES = 2
-
-
-def _http_post_json(url: str, headers: dict, payload: dict, timeout: int) -> Optional[dict]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
 
 
 def search_wipo(
@@ -63,7 +38,7 @@ def search_wipo(
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    data = _http_post_json(_WIPO_BASE, headers, payload, timeout)
+    data = http_post_json(_WIPO_BASE, headers=headers, payload=payload, timeout=timeout)
     if not data:
         return []
 

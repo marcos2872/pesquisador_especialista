@@ -5,21 +5,23 @@ Busca de patentes em multiplas APIs gratuitas:
   - USPTO Open Data API (gratis com cadastro; opcional)
   - Lens.org (gratis com cadastro academico; opcional)
   - PatentsView (gratis, sem cadastro, atualmente descontinuada com WAF)
+  - WIPO Patentscope (gratis com cadastro; opcional)
+  - Google Patents via SerpAPI (gratis com cadastro; opcional)
 
-A funcao search_patents() combina resultados de todos os providers ativos.
+A funcao search_patents() combina resultados de todos os providers ativos
+em paralelo, remove duplicatas e respeita max_results.
 """
 
 import base64
-import json
 import logging
 import os
 import re
-import time
-from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+from models.patent import Patent
+from utils.http_client import http_get_json, http_get_text, http_post_json
 
 logger = logging.getLogger("pesquisador.patents")
 
@@ -32,89 +34,6 @@ _USPTO_BASE = "https://api.uspto.gov/patents/search"
 _LENS_PATENT_BASE = "https://api.lens.org/patent/search"
 _LENS_SCHOLARLY_BASE = "https://api.lens.org/scholarly/search"
 _PATENTSVIEW_BASE = "https://api.patentsview.org/patents/query"
-_MAX_RETRIES = 2
-
-
-@dataclass
-class Patent:
-    title: str
-    number: str
-    url: str
-    year: Optional[int] = None
-    inventors: list[str] = field(default_factory=list)
-    assignee: Optional[str] = None
-    abstract: Optional[str] = None
-    jurisdiction: str = "US"
-    source_api: str = "unknown"
-
-    def is_valid(self) -> bool:
-        return bool(self.title and self.number and self.url)
-
-    def short_citation(self) -> str:
-        inventors = (
-            ", ".join(self.inventors[:2])
-            if self.inventors
-            else "Inventores não listados"
-        )
-        if len(self.inventors) > 2:
-            inventors += " et al."
-        year = f" ({self.year})" if self.year else ""
-        return f"{inventors}{year} — {self.title} — {self.number} — {self.url}"
-
-
-def _http_get_json(url: str, headers: dict, timeout: int) -> Optional[dict]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, headers=headers, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
-
-
-def _http_get_text(url: str, headers: dict, timeout: int) -> Optional[str]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, headers=headers, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return response.read().decode("utf-8", errors="ignore")
-        except HTTPError:
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
-
-
-def _http_post_json(
-    url: str, headers: dict, payload: dict, timeout: int
-) -> Optional[dict]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers=headers,
-            method="POST",
-        )
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
 
 
 def _get_epo_ops_token(timeout: int) -> Optional[str]:
@@ -127,21 +46,19 @@ def _get_epo_ops_token(timeout: int) -> Optional[str]:
         f"{consumer_key}:{consumer_secret}".encode("utf-8")
     ).decode("ascii")
     data = urlencode({"grant_type": "client_credentials"}).encode("utf-8")
-    req = Request(
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+    payload = http_post_json(
         _EPO_OPS_TOKEN_URL,
-        data=data,
-        headers={
-            "Authorization": f"Basic {credentials}",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        method="POST",
+        headers=headers,
+        payload=None,
+        timeout=timeout,
     )
-    try:
-        with urlopen(req, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            return payload.get("access_token")
-    except (HTTPError, URLError, json.JSONDecodeError):
+    if not isinstance(payload, dict):
         return None
+    return payload.get("access_token")
 
 
 def _search_epo_ops(topic: str, max_results: int, timeout: int) -> list[Patent]:
@@ -156,11 +73,13 @@ def _search_epo_ops(topic: str, max_results: int, timeout: int) -> list[Patent]:
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    raw = _http_get_text(url, headers, timeout)
+    raw = http_get_text(url, headers, timeout)
     if not raw:
         return []
 
     try:
+        import json
+
         data = json.loads(raw)
     except json.JSONDecodeError:
         return []
@@ -212,7 +131,7 @@ def _search_uspto(topic: str, max_results: int, timeout: int) -> list[Patent]:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    data = _http_post_json(f"{_USPTO_BASE}", headers, payload, timeout)
+    data = http_post_json(f"{_USPTO_BASE}", headers=headers, payload=payload, timeout=timeout)
     if not data:
         return []
 
@@ -272,7 +191,7 @@ def _search_lens(topic: str, max_results: int, timeout: int) -> list[Patent]:
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
-    data = _http_post_json(_LENS_PATENT_BASE, headers, payload, timeout)
+    data = http_post_json(_LENS_PATENT_BASE, headers=headers, payload=payload, timeout=timeout)
     if not data:
         return []
 
@@ -329,14 +248,14 @@ def _search_patentsview(topic: str, max_results: int, timeout: int) -> list[Pate
     }
     params = urlencode(
         {
-            "q": json.dumps(query_payload["q"]),
-            "f": json.dumps(query_payload["f"]),
-            "o": json.dumps(query_payload["o"]),
+            "q": __import__("json").dumps(query_payload["q"]),
+            "f": __import__("json").dumps(query_payload["f"]),
+            "o": __import__("json").dumps(query_payload["o"]),
         }
     )
     url = f"{_PATENTSVIEW_BASE}?{params}"
     headers = {"Accept": "application/json"}
-    data = _http_get_json(url, headers, timeout)
+    data = http_get_json(url, headers, timeout)
     if not data or not isinstance(data.get("patents"), list):
         return []
 
@@ -402,10 +321,10 @@ def search_patents(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[Patent]:
     """
-    Busca patentes reais para o topico combinando varias APIs gratuitas.
+    Busca patentes reais para o topico combinando varias APIs gratuitas em paralelo.
     Retorna ate max_results patentes validas.
 
-    Providers ativos (em ordem de prioridade):
+    Providers ativos:
       1. Espacenet OPS (gratis com EPO_OPS_CONSUMER_KEY/SECRET)
       2. USPTO (gratis com USPTO_API_KEY)
       3. Lens.org (gratis com LENS_API_TOKEN)
@@ -416,27 +335,35 @@ def search_patents(
     from .serpapi import search_google_patents as _search_google_patents
     from .wipo import search_wipo as _search_wipo_provider
 
-    collected: list[Patent] = []
     per_provider = max(3, max_results * 2)
+    providers = [
+        ("epo_ops", _search_epo_ops),
+        ("uspto", _search_uspto),
+        ("lens", _search_lens),
+        ("wipo", _search_wipo_provider),
+        ("google_patents", _search_google_patents),
+        ("patentsview", _search_patentsview),
+    ]
 
-    for provider in (
-        _search_epo_ops,
-        _search_uspto,
-        _search_lens,
-        _search_wipo_provider,
-        _search_google_patents,
-        _search_patentsview,
-    ):
-        try:
-            results = provider(topic, per_provider, timeout)
-        except Exception as exc:
-            logger.warning("Provider %s falhou: %s", provider.__name__, exc)
-            results = []
-        collected.extend(results)
+    collected: list[Patent] = []
+
+    with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+        future_to_name = {
+            executor.submit(fn, topic, per_provider, timeout): name
+            for name, fn in providers
+        }
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
+            try:
+                results = future.result()
+                logger.info("Provider %s: %d resultados", name, len(results))
+                collected.extend(results)
+            except Exception as exc:
+                logger.warning("Provider %s falhou: %s", name, exc)
 
     if not collected:
         return []
 
     deduped = _dedup_patents(collected)
     valid = [p for p in deduped if p.is_valid()]
-    return valid
+    return valid[:max_results]

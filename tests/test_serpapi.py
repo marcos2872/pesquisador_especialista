@@ -24,7 +24,7 @@ def test_google_scholar_parses_response():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         articles = search_google_scholar("machine learning", 3, 5)
     assert len(articles) == 1
     a = articles[0]
@@ -51,7 +51,7 @@ def test_google_scholar_handles_minimal_summary():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         articles = search_google_scholar("test", 3, 5)
     assert articles[0].title == "Minimal Article"
     assert articles[0].year == 2023
@@ -66,13 +66,13 @@ def test_google_scholar_handles_missing_title():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         assert search_google_scholar("test", 3, 5) == []
 
 
 def test_google_scholar_returns_empty_when_request_fails():
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=None):
+         patch("utils.search.serpapi.http_get_json", return_value=None):
         assert search_google_scholar("test", 3, 5) == []
 
 
@@ -96,7 +96,7 @@ def test_google_patents_parses_response():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         patents = search_google_patents("machine learning", 3, 5)
     assert len(patents) == 1
     p = patents[0]
@@ -125,7 +125,7 @@ def test_google_patents_uses_inventors_field_fallback():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         patents = search_google_patents("test", 3, 5)
     assert patents[0].inventors == ["Charlie Inventor"]
 
@@ -142,7 +142,7 @@ def test_google_patents_skips_entry_without_patent_id():
         ]
     }
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=response):
+         patch("utils.search.serpapi.http_get_json", return_value=response):
         patents = search_google_patents("test", 3, 5)
     assert len(patents) == 1
     assert patents[0].number == "US20240000003A1"
@@ -150,5 +150,5 @@ def test_google_patents_skips_entry_without_patent_id():
 
 def test_google_patents_returns_empty_when_request_fails():
     with patch.dict("os.environ", {"SERPAPI_API_KEY": "fake-key"}), \
-         patch("utils.search.serpapi._http_get_json", return_value=None):
+         patch("utils.search.serpapi.http_get_json", return_value=None):
         assert search_google_patents("test", 3, 5) == []

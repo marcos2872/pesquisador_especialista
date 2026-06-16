@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
+from models.article import Article
 from utils.search.academic import (
-    Article,
     _dedup_articles,
     _reconstruct_abstract,
     _search_arxiv,
@@ -35,7 +35,7 @@ def test_article_is_valid_requires_title_and_link():
 
 
 def test_search_crossref_parses_response(mock_crossref_response):
-    with patch("utils.search.academic._http_get_json", return_value=mock_crossref_response):
+    with patch("utils.search.academic.http_get_json", return_value=mock_crossref_response):
         articles = _search_crossref("test", 5, 10)
     assert len(articles) == 2
     assert articles[0].doi == "10.1234/test.001"
@@ -48,7 +48,7 @@ def test_search_crossref_parses_response(mock_crossref_response):
 
 
 def test_search_openalex_parses_response(mock_openalex_response):
-    with patch("utils.search.academic._http_get_json", return_value=mock_openalex_response):
+    with patch("utils.search.academic.http_get_json", return_value=mock_openalex_response):
         articles = _search_openalex("test", 5, 10)
     assert len(articles) == 1
     a = articles[0]
@@ -60,24 +60,34 @@ def test_search_openalex_parses_response(mock_openalex_response):
 
 
 def test_search_articles_prefers_crossref(mock_crossref_response, mock_openalex_response):
-    with patch("utils.search.academic._http_get_json", side_effect=[mock_crossref_response, None]), \
-         patch("utils.search.academic._http_get_text", return_value=None):
+    def _mock_json(url, headers=None, timeout=10):
+        if "crossref" in url:
+            return mock_crossref_response
+        return None
+
+    with patch("utils.search.academic.http_get_json", side_effect=_mock_json), \
+         patch("utils.search.academic.http_get_text", return_value=None):
         articles = search_articles("test", max_results=3, timeout=10)
     assert len(articles) == 2
     assert all(a.source_api == "crossref" for a in articles)
 
 
 def test_search_articles_falls_back_to_openalex(mock_openalex_response):
-    with patch("utils.search.academic._http_get_json", side_effect=[None, mock_openalex_response]), \
-         patch("utils.search.academic._http_get_text", return_value=None):
+    def _mock_json(url, headers=None, timeout=10):
+        if "openalex" in url:
+            return mock_openalex_response
+        return None
+
+    with patch("utils.search.academic.http_get_json", side_effect=_mock_json), \
+         patch("utils.search.academic.http_get_text", return_value=None):
         articles = search_articles("test", max_results=3, timeout=10)
     assert len(articles) == 1
     assert articles[0].source_api == "openalex"
 
 
 def test_search_articles_returns_empty_when_all_fail():
-    with patch("utils.search.academic._http_get_json", return_value=None), \
-         patch("utils.search.academic._http_get_text", return_value=None):
+    with patch("utils.search.academic.http_get_json", return_value=None), \
+         patch("utils.search.academic.http_get_text", return_value=None):
         assert search_articles("test", max_results=3, timeout=10) == []
 
 
@@ -90,8 +100,8 @@ def test_search_articles_filters_invalid():
             ]
         }
     }
-    with patch("utils.search.academic._http_get_json", return_value=bad_response), \
-         patch("utils.search.academic._http_get_text", return_value=None):
+    with patch("utils.search.academic.http_get_json", return_value=bad_response), \
+         patch("utils.search.academic.http_get_text", return_value=None):
         articles = search_articles("test", max_results=3, timeout=10)
     assert len(articles) == 1
     assert articles[0].doi == "10.1/ok"
@@ -112,7 +122,7 @@ _ARXIV_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def test_search_arxiv_parses_xml():
-    with patch("utils.search.academic._http_get_text", return_value=_ARXIV_XML):
+    with patch("utils.search.academic.http_get_text", return_value=_ARXIV_XML):
         articles = _search_arxiv("screw extruder", 3, 10)
     assert len(articles) == 1
     a = articles[0]
@@ -126,12 +136,12 @@ def test_search_arxiv_parses_xml():
 
 
 def test_search_arxiv_handles_malformed_xml():
-    with patch("utils.search.academic._http_get_text", return_value="<invalid"):
+    with patch("utils.search.academic.http_get_text", return_value="<invalid"):
         assert _search_arxiv("test", 3, 10) == []
 
 
 def test_search_arxiv_returns_empty_when_request_fails():
-    with patch("utils.search.academic._http_get_text", return_value=None):
+    with patch("utils.search.academic.http_get_text", return_value=None):
         assert _search_arxiv("test", 3, 10) == []
 
 
@@ -150,7 +160,7 @@ def test_search_core_parses_response():
             }
         ],
     }
-    with patch("utils.search.academic._http_get_json", return_value=response):
+    with patch("utils.search.academic.http_get_json", return_value=response):
         articles = _search_core("screw extruder", 3, 10)
     assert len(articles) == 1
     a = articles[0]
@@ -163,7 +173,7 @@ def test_search_core_parses_response():
 
 
 def test_search_core_returns_empty_when_request_fails():
-    with patch("utils.search.academic._http_get_json", return_value=None):
+    with patch("utils.search.academic.http_get_json", return_value=None):
         assert _search_core("test", 3, 10) == []
 
 
@@ -182,7 +192,7 @@ def test_search_semantic_scholar_parses_response():
             }
         ],
     }
-    with patch("utils.search.academic._http_get_json", return_value=response):
+    with patch("utils.search.academic.http_get_json", return_value=response):
         articles = _search_semantic_scholar("test", 3, 10)
     assert len(articles) == 1
     a = articles[0]
@@ -203,7 +213,7 @@ def test_search_semantic_scholar_falls_back_to_paper_id_url():
             }
         ],
     }
-    with patch("utils.search.academic._http_get_json", return_value=response):
+    with patch("utils.search.academic.http_get_json", return_value=response):
         articles = _search_semantic_scholar("test", 3, 10)
     assert articles[0].url == "https://www.semanticscholar.org/paper/xyz789"
     assert articles[0].doi is None
@@ -258,8 +268,16 @@ def test_search_articles_combines_multiple_providers():
     <author><name>X</name></author>
   </entry>
 </feed>"""
-    with patch("utils.search.academic._http_get_json", side_effect=[crossref_resp, openalex_resp, None, None, None]), \
-         patch("utils.search.academic._http_get_text", return_value=arxiv_xml):
+
+    def _mock_json(url, headers=None, timeout=10):
+        if "crossref" in url:
+            return crossref_resp
+        elif "openalex" in url:
+            return openalex_resp
+        return None
+
+    with patch("utils.search.academic.http_get_json", side_effect=_mock_json), \
+         patch("utils.search.academic.http_get_text", return_value=arxiv_xml):
         articles = search_articles("test", max_results=5, timeout=10)
     sources = {a.source_api for a in articles}
     assert "crossref" in sources

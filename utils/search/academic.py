@@ -7,22 +7,23 @@ Busca de artigos academicos em multiplas APIs gratuitas:
   - Core.ac.uk (gratis, sem cadastro)
   - Semantic Scholar (gratis com cadastro; opcional)
   - Unpaywall (gratis com email; opcional, enriquece com link de PDF)
+  - IEEE Xplore (gratis com cadastro; opcional)
+  - Google Scholar via SerpAPI (gratis com cadastro; opcional)
 
 A funcao search_articles() combina resultados de todos os providers ativos
-e remove duplicatas por DOI/titulo.
+em paralelo, remove duplicatas por DOI/titulo e respeita max_results.
 """
 
-import json
 import logging
 import os
 import re
-import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+
+from models.article import Article
+from utils.http_client import http_get_json, http_get_text
 
 logger = logging.getLogger("pesquisador.academic")
 
@@ -42,66 +43,6 @@ _ARXIV_NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "arxiv": "http://arxiv.org/schemas/atom",
 }
-_MAX_RETRIES = 2
-
-
-@dataclass
-class Article:
-    title: str
-    authors: list[str] = field(default_factory=list)
-    year: Optional[int] = None
-    venue: Optional[str] = None
-    doi: Optional[str] = None
-    url: Optional[str] = None
-    abstract: Optional[str] = None
-    pdf_url: Optional[str] = None
-    source_api: str = "unknown"
-
-    def is_valid(self) -> bool:
-        return bool(self.title and (self.doi or self.url))
-
-    def short_citation(self) -> str:
-        authors = (
-            ", ".join(self.authors[:3]) if self.authors else "Autores não listados"
-        )
-        if len(self.authors) > 3:
-            authors += " et al."
-        venue = f" ({self.venue})" if self.venue else ""
-        year = f", {self.year}" if self.year else ""
-        link = self.url or (f"https://doi.org/{self.doi}" if self.doi else "sem link")
-        return f"{authors}{year}{venue} — {self.title} — {link}"
-
-
-def _http_get_json(url: str, headers: dict, timeout: int) -> Optional[dict]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, headers=headers, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except (HTTPError, json.JSONDecodeError):
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
-
-
-def _http_get_text(url: str, headers: dict, timeout: int) -> Optional[str]:
-    for attempt in range(_MAX_RETRIES + 1):
-        req = Request(url, headers=headers, method="GET")
-        try:
-            with urlopen(req, timeout=timeout) as response:
-                return response.read().decode("utf-8", errors="ignore")
-        except HTTPError:
-            return None
-        except URLError:
-            if attempt < _MAX_RETRIES:
-                time.sleep(0.5 * (attempt + 1))
-                continue
-            return None
-    return None
 
 
 def _reconstruct_abstract(inverted_index: Optional[dict]) -> Optional[str]:
@@ -130,7 +71,7 @@ def _search_crossref(topic: str, max_results: int, timeout: int) -> list[Article
         "User-Agent": f"pesquisador_especialista/1.0 (mailto:{DEFAULT_OPENALEX_EMAIL})",
         "Accept": "application/json",
     }
-    data = _http_get_json(url, headers, timeout)
+    data = http_get_json(url, headers, timeout)
     if not data:
         return []
 
@@ -181,7 +122,7 @@ def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article
             "User-Agent": f"pesquisador_especialista/1.0 (mailto:{DEFAULT_OPENALEX_EMAIL})",
             "Accept": "application/json",
         }
-        data = _http_get_json(url, headers, timeout)
+        data = http_get_json(url, headers, timeout)
         if not data:
             continue
 
@@ -232,7 +173,7 @@ def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
         "User-Agent": "pesquisador_especialista/1.0",
         "Accept": "application/atom+xml",
     }
-    raw = _http_get_text(url, headers, timeout)
+    raw = http_get_text(url, headers, timeout)
     if not raw:
         return []
 
@@ -296,7 +237,7 @@ def _search_core(topic: str, max_results: int, timeout: int) -> list[Article]:
     params = urlencode({"q": topic, "limit": str(max_results)})
     url = f"{_CORE_BASE}/search/works?{params}"
     headers = {"Accept": "application/json"}
-    data = _http_get_json(url, headers, timeout)
+    data = http_get_json(url, headers, timeout)
     if not data:
         return []
 
@@ -339,7 +280,7 @@ def _search_semantic_scholar(
     headers = {"Accept": "application/json"}
     if _SEMANTIC_SCHOLAR_API_KEY:
         headers["x-api-key"] = _SEMANTIC_SCHOLAR_API_KEY
-    data = _http_get_json(url, headers, timeout)
+    data = http_get_json(url, headers, timeout)
     if not data:
         return []
 
@@ -375,18 +316,22 @@ def _enrich_with_unpaywall(articles: list[Article], timeout: int) -> list[Articl
     if not DEFAULT_UNPAYWALL_EMAIL or "@" not in DEFAULT_UNPAYWALL_EMAIL:
         return articles
 
-    for article in articles:
+    def _fetch_one(article: Article) -> None:
         if not article.doi or article.pdf_url:
-            continue
+            return
         url = f"{_UNPAYWALL_BASE}/{article.doi}?email={DEFAULT_UNPAYWALL_EMAIL}"
         headers = {"Accept": "application/json"}
-        data = _http_get_json(url, headers, timeout)
+        data = http_get_json(url, headers, timeout)
         if not data:
-            continue
+            return
         best = data.get("best_oa_location") or {}
         pdf_url = best.get("url_for_pdf") or best.get("url")
         if pdf_url:
             article.pdf_url = pdf_url
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        executor.map(_fetch_one, articles)
+
     return articles
 
 
@@ -418,9 +363,9 @@ def search_articles(
 ) -> list[Article]:
     """
     Busca artigos reais para o topico. Combina resultados de varias APIs gratuitas
-    e remove duplicatas. Retorna ate max_results artigos validos.
+    em paralelo, remove duplicatas e retorna ate max_results artigos validos.
 
-    Providers ativos (em ordem de prioridade):
+    Providers ativos:
       1. Crossref (gratis, sem cadastro)
       2. OpenAlex (gratis, sem cadastro)
       3. arXiv (gratis, sem cadastro)
@@ -432,24 +377,32 @@ def search_articles(
     from .ieee import search_ieee as _search_ieee_provider
     from .serpapi import search_google_scholar as _search_google_scholar
 
-    collected: list[Article] = []
     per_provider = max(3, max_results * 2)
+    providers = [
+        ("crossref", _search_crossref),
+        ("openalex", _search_openalex),
+        ("arxiv", _search_arxiv),
+        ("core", _search_core),
+        ("semantic_scholar", _search_semantic_scholar),
+        ("ieee", _search_ieee_provider),
+        ("google_scholar", _search_google_scholar),
+    ]
 
-    for provider in (
-        _search_crossref,
-        _search_openalex,
-        _search_arxiv,
-        _search_core,
-        _search_semantic_scholar,
-        _search_ieee_provider,
-        _search_google_scholar,
-    ):
-        try:
-            results = provider(topic, per_provider, timeout)
-        except Exception as exc:
-            logger.warning("Provider %s falhou: %s", provider.__name__, exc)
-            results = []
-        collected.extend(results)
+    collected: list[Article] = []
+
+    with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+        future_to_name = {
+            executor.submit(fn, topic, per_provider, timeout): name
+            for name, fn in providers
+        }
+        for future in as_completed(future_to_name):
+            name = future_to_name[future]
+            try:
+                results = future.result()
+                logger.info("Provider %s: %d resultados", name, len(results))
+                collected.extend(results)
+            except Exception as exc:
+                logger.warning("Provider %s falhou: %s", name, exc)
 
     if not collected:
         return []
@@ -457,4 +410,4 @@ def search_articles(
     deduped = _dedup_articles(collected)
     deduped = _enrich_with_unpaywall(deduped, timeout)
     valid = [a for a in deduped if a.is_valid()]
-    return valid
+    return valid[:max_results]
