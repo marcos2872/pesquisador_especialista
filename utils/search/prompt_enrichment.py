@@ -11,8 +11,8 @@ from typing import Optional
 from .academic import Article
 from .patents import Patent
 
-DEFAULT_MAX_ARTICLES = int(os.getenv("SOURCES_MAX_ARTICLES", "5"))
-DEFAULT_MAX_PATENTS = int(os.getenv("SOURCES_MAX_PATENTS", "3"))
+DEFAULT_MAX_ARTICLES = int(os.getenv("SOURCES_MAX_ARTICLES", "50"))
+DEFAULT_MAX_PATENTS = int(os.getenv("SOURCES_MAX_PATENTS", "30"))
 DEFAULT_MAX_ABSTRACT_CHARS = int(os.getenv("SOURCES_MAX_ABSTRACT_CHARS", "600"))
 
 

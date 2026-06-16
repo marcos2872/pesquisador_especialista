@@ -393,6 +393,7 @@ def search_patents(
       5. PatentsView (gratis, sem cadastro; atualmente descontinuado)
     """
     from .wipo import search_wipo as _search_wipo_provider
+    from .serpapi import search_google_patents as _search_google_patents
 
     collected: list[Patent] = []
     per_provider = max(3, max_results * 2)
@@ -402,10 +403,9 @@ def search_patents(
         _search_uspto,
         _search_lens,
         _search_wipo_provider,
+        _search_google_patents,
         _search_patentsview,
     ):
-        if len(_dedup_patents(collected)) >= max_results * 2:
-            break
         try:
             results = provider(topic, per_provider, timeout)
         except Exception:
@@ -416,5 +416,5 @@ def search_patents(
         return []
 
     deduped = _dedup_patents(collected)
-    valid = [p for p in deduped if p.is_valid()][:max_results]
+    valid = [p for p in deduped if p.is_valid()]
     return valid
