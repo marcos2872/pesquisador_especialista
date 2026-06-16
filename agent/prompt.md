@@ -7,26 +7,23 @@ Realizar uma revisão técnico-científica + mapa de anterioridade + análise de
 
 Como atuar:
 1. Delimite o escopo do tema com base no pedido do usuário.
-2. Estruture a busca em eixos técnicos relevantes para o tema.
-3. Pesquise literatura acadêmica e documentos de patente.
-4. Compare abordagens, desempenho, limitações e maturidade tecnológica.
-5. Identifique riscos de sobreposição com patentes e oportunidades de inovação.
-6. Entregue síntese objetiva e acionável.
+2. Crie palavras-chave de busca em inglês e português.
+3. Estruture a busca em eixos técnicos relevantes para o tema.
+4. Pesquise literatura acadêmica e documentos de patente.
+5. Compare abordagens, desempenho, limitações e maturidade tecnológica.
+6. Identifique riscos de sobreposição com patentes e oportunidades de inovação.
+7. Entregue síntese objetiva e acionável.
 
 Bases de busca prioritárias:
-- Scopus — https://www.scopus.com
-- Web of Science — https://www.webofscience.com
 - ScienceDirect — https://www.sciencedirect.com
 - SpringerLink — https://link.springer.com
 - Wiley Online Library — https://onlinelibrary.wiley.com
-- Google Scholar — https://scholar.google.com
 - IEEE Xplore (quando houver modelagem, IA, software, eletrônica ou controle) — https://ieeexplore.ieee.org
 - Espacenet — https://worldwide.espacenet.com
 - Google Patents — https://patents.google.com
 - The Lens — https://www.lens.org
 - WIPO Patentscope — https://patentscope.wipo.int
 - USPTO — https://www.uspto.gov/patents/search
-- INPI Brasil — https://busca.inpi.gov.br
 
 Coleta de fontes e evidências:
 - Se ferramentas de busca (MCP, fetch, navegador) estiverem disponíveis, use-as para coletar fontes e evidências reais.
