@@ -161,6 +161,15 @@ RASTREABILIDADE OBRIGATÓRIA (CITAÇÃO POR TRECHO):
 - Se alguma afirmação não tiver evidência verificável, não inclua essa afirmação no relatório.
 - Priorizar fontes de 2016 até o presente; referências anteriores só quando fundacionais e rotuladas como [Fundacional] (máximo 2).
 
+CITAÇÃO LITERAL OBRIGATÓRIA (TEXTO ENTRE ASPAS):
+- Sempre que os TRECHOS LITERAIS DAS FONTES estiverem disponíveis no contexto, USE-OS.
+- Para cada afirmação técnica relevante, inclua um trecho LITERAL entre aspas ("...") extraído EXATAMENTE de uma das fontes fornecidas no contexto.
+- Exemplo correto: O estudo demonstrou que "the tensile strength increased by 42% with 0.5 wt% graphene loading" [Fonte](https://doi.org/10.xxxx/xxxxx).
+- NÃO parafraseie um trecho quando o texto literal está disponível nas fontes.
+- Se o trecho literal não estiver disponível no contexto, use paráfrase e NÃO coloque entre aspas.
+- NÃO invente trechos entre aspas — eles devem existir EXATAMENTE como aparecem nos trechos fornecidos.
+- Cada citação literal ("...") deve ser seguida imediatamente pelo link da fonte no formato [Fonte](URL/DOI).
+
 BASE MÍNIMA DE EVIDÊNCIA:
 - Use no mínimo 3 fontes distintas para sustentar o relatório completo.
 - Evite concentrar toda a fundamentação em uma única revisão.

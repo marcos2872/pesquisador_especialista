@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import json
+import logging
 import os
 import re
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,10 +17,18 @@ from utils.search.academic import search_articles
 from utils.search.patents import search_patents
 from utils.search.prompt_enrichment import build_sources_context
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
+logger = logging.getLogger("pesquisador")
+
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
-PROMPT_TEMPLATE_PATH = BASE_DIR / "agent" / "prompt.md"
+PROMPT_TEMPLATE_PATH = BASE_DIR / "agent" / "systemprompt.md"
+USER_PROMPT_PATH = BASE_DIR / "agent" / "userprompt.md"
 
 
 def load_prompt_template() -> str:
@@ -35,36 +46,17 @@ SEARCH_QUERY_KEYS = {"q", "query", "search", "keyword", "keywords", "term"}
 MIN_UNIQUE_SOURCES = 3
 
 
+def load_user_prompt_template() -> str:
+    if USER_PROMPT_PATH.exists():
+        return USER_PROMPT_PATH.read_text(encoding="utf-8").strip()
+    return "Tema da pesquisa: {topic}"
+
+
+USER_PROMPT_TEMPLATE = load_user_prompt_template()
+
+
 def build_user_prompt(topic: str, sources_context: str = "") -> str:
-    base = (
-        f"Tema da pesquisa: {topic}\n\n"
-        "Execute a pesquisa técnica e entregue exatamente nesta estrutura:\n"
-        "1. Estado da arte técnico-científico\n"
-        "2. Pesquisa de anterioridade/patentes\n"
-        "3. Tabela comparativa\n"
-        "4. Lacunas e oportunidades\n"
-        "5. Conclusão técnica\n"
-        "6. Referências utilizadas (links)\n\n"
-        "FORMATO OBRIGATÓRIO: responda em Markdown (GitHub Flavored Markdown).\n"
-        "Use português técnico e inclua obrigatoriamente links diretos/DOI/número de patente.\n"
-        "É PROIBIDO citar links de páginas de busca, homepages ou listagens.\n"
-        "Exemplos PROIBIDOS: https://scholar.google.com, https://www.scopus.com, https://www.sciencedirect.com,\n"
-        "https://worldwide.espacenet.com, https://patents.google.com (sem número de patente), https://www.uspto.gov.\n"
-        "Use apenas links diretos do artigo/documento/patente que fundamenta cada afirmação, por exemplo:\n"
-        "https://doi.org/10.xxxx/xxxxx ou https://patents.google.com/patent/US12345678A1/en.\n"
-        "NÃO invente dados, números, resultados experimentais, autores, anos, títulos, DOIs ou números de patente.\n"
-        "NÃO invente URLs ou DOIs plausíveis: cite somente fontes que você conhece e consegue referenciar com precisão.\n"
-        "Se não houver fonte confiável para uma afirmação, não faça a afirmação.\n"
-        "Se a base confiável for insuficiente para responder o tema, declare explicitamente essa limitação.\n"
-        "NÃO escreva avisos operacionais como 'Falha operacional', 'sem acesso MCP' ou similares.\n"
-        "NÃO diga que usou ferramentas que não usou.\n"
-        "Priorize fontes de 2016 até hoje; se usar referência anterior, marque como [Fundacional] "
-        "e use no máximo 2.\n"
-        "REGRA OBRIGATÓRIA DE CITAÇÃO: em cada parágrafo técnico, adicione ao final "
-        "um marcador em LINK MARKDOWN no formato [Fonte](URL/DOI/link-da-patente).\n"
-        "Na tabela comparativa, adicione uma coluna 'Fonte (link/DOI/patente)'.\n"
-        "Na seção 6, liste somente as fontes realmente citadas no texto."
-    )
+    base = USER_PROMPT_TEMPLATE.replace("{topic}", topic)
     if sources_context:
         return f"{base}\n\n--- CONTEXTO DE FONTES VERIFICADAS ---\n{sources_context}\n---\nUse SOMENTE as fontes do contexto acima para embasar o relatório. Não adicione fontes externas.\n"
     return base
@@ -87,7 +79,9 @@ def extract_openai_text(data: dict) -> str:
             for part in content:
                 if not isinstance(part, dict):
                     continue
-                if part.get("type") == "output_text" and isinstance(part.get("text"), str):
+                if part.get("type") == "output_text" and isinstance(
+                    part.get("text"), str
+                ):
                     text = part["text"].strip()
                     if text:
                         chunks.append(text)
@@ -124,12 +118,15 @@ def _is_search_or_home_url(url: str) -> bool:
 
     if normalized_path in ("",):
         return True
-    if any(token in lower_path for token in ("/search", "/scholar", "/results", "/query")):
+    if any(
+        token in lower_path for token in ("/search", "/scholar", "/results", "/query")
+    ):
         return True
     if lower_host == "scholar.google.com":
         return True
     if query_keys & SEARCH_QUERY_KEYS and not any(
-        token in lower_path for token in ("/article", "/doi", "/patent", "/document", "/pdf")
+        token in lower_path
+        for token in ("/article", "/doi", "/patent", "/document", "/pdf")
     ):
         return True
     return False
@@ -141,9 +138,24 @@ def _looks_like_primary_source(url: str) -> bool:
     path = parsed.path.lower()
     if "doi.org/" in url.lower():
         return True
-    if any(token in path for token in ("/article", "/doi", "/abs", "/full", "/pdf", "/patent", "/document")):
+    if any(
+        token in path
+        for token in (
+            "/article",
+            "/doi",
+            "/abs",
+            "/full",
+            "/pdf",
+            "/patent",
+            "/document",
+        )
+    ):
         return True
-    if host in {"patents.google.com", "worldwide.espacenet.com", "patentscope.wipo.int"} and path.strip("/"):
+    if host in {
+        "patents.google.com",
+        "worldwide.espacenet.com",
+        "patentscope.wipo.int",
+    } and path.strip("/"):
         return True
     return False
 
@@ -160,7 +172,6 @@ def validate_report_sources(report: str) -> None:
             "A resposta não trouxe links diretos de artigo/documento/patente. "
             "Inclua DOI ou URL do documento final."
         )
-
 
 
 def _count_unique_sources(report: str) -> int:
@@ -210,10 +221,10 @@ def sanitize_report_links(report: str, topic: str) -> tuple[str, list[str]]:
                 sanitized,
             )
 
-    # Reconstrói a seção 6 de referências, mantendo apenas links válidos.
-    # Remove qualquer seção de referências existente no final e reinsere a lista limpa.
+    # Remove a seção 6 de referências existente no final do texto.
+    # "$" ancora no fim da string; DOTALL permite .* cobrir múltiplas linhas.
     reference_header_pattern = re.compile(
-        r"\n##\s+6\.\s+Referências.*", re.IGNORECASE | re.DOTALL
+        r"\n##\s+6\.\s+Referências.*$", re.IGNORECASE | re.DOTALL
     )
     sanitized = reference_header_pattern.sub("", sanitized)
     sanitized = sanitized.rstrip()
@@ -269,6 +280,11 @@ def call_openai(topic: str, sources_context: str = "", retry: bool = False) -> s
             data = json.loads(response.read().decode("utf-8"))
     except HTTPError as err:
         body = err.read().decode("utf-8", errors="ignore")
+        if err.code == 404:
+            raise RuntimeError(
+                f"Modelo '{model}' não encontrado no endpoint '{base_url}'. "
+                "Verifique OPENAI_MODEL e OPENAI_BASE_URL."
+            ) from err
         raise RuntimeError(f"Falha OpenAI ({err.code}): {body}") from err
     except URLError as err:
         raise RuntimeError(f"Falha de conexão OpenAI: {err.reason}") from err
@@ -307,23 +323,93 @@ def build_retry_prompt(topic: str) -> str:
     )
 
 
-def _collect_real_sources(topic: str) -> str:
-    """Coleta fontes reais via APIs gratuitas e retorna o contexto formatado."""
+def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
+    """
+    Coleta fontes reais via APIs gratuitas, baixa textos e extrai snippets.
+
+    Returns:
+        (sources_context, snippets_map): contexto formatado e mapa url->snippets.
+    """
     if os.getenv("ENABLE_REAL_SEARCH", "1") == "0":
-        return ""
+        return "", {}
 
-    articles: list = []
-    patents: list = []
-    try:
-        articles = search_articles(topic, max_results=5, timeout=15)
-    except Exception:
-        articles = []
-    try:
-        patents = search_patents(topic, max_results=3, timeout=15)
-    except Exception:
-        patents = []
+    from utils.fetcher import download_source_texts, generate_query_variants
 
-    return build_sources_context(articles, patents) or ""
+    # Expande o tópico em múltiplas queries (EN + PT + variantes)
+    queries = generate_query_variants(topic)
+    logger.info("Buscando com %d queries: %s", len(queries), queries[:3])
+
+    all_articles: list = []
+    all_patents: list = []
+
+    for query in queries[:3]:  # Limita a 3 queries para não sobrecarregar APIs
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_art = executor.submit(
+                search_articles, query, max_results=5, timeout=15
+            )
+            future_pat = executor.submit(
+                search_patents, query, max_results=3, timeout=15
+            )
+
+            try:
+                all_articles.extend(future_art.result())
+            except Exception as exc:
+                logger.warning("Falha na busca de artigos para '%s': %s", query, exc)
+
+            try:
+                all_patents.extend(future_pat.result())
+            except Exception as exc:
+                logger.warning("Falha na busca de patentes para '%s': %s", query, exc)
+
+    if not all_articles and not all_patents:
+        logger.info("Nenhuma fonte real encontrada para o tópico '%s'", topic)
+        return "", {}
+
+    # Baixa PDFs e extrai snippets das fontes encontradas
+    sources_for_download: list[dict] = []
+    for a in all_articles:
+        entry = {
+            "title": a.title,
+            "url": a.url,
+            "pdf_url": getattr(a, "pdf_url", None),
+            "doi": getattr(a, "doi", None),
+        }
+        sources_for_download.append(entry)
+    for p in all_patents:
+        entry = {
+            "title": p.title,
+            "url": p.url,
+            "pdf_url": None,
+            "doi": None,
+        }
+        sources_for_download.append(entry)
+
+    logger.info(
+        "Baixando PDFs e extraindo snippets de %d fontes...", len(sources_for_download)
+    )
+    enriched = download_source_texts(
+        sources_for_download, topic, timeout=20, max_workers=3
+    )
+
+    # Constrói o mapa de snippets: url -> lista de trechos
+    snippets_map: dict[str, list[str]] = {}
+    for src in enriched:
+        url = src.get("url") or ""
+        if url and src.get("snippets"):
+            snippets_map[url] = src["snippets"]
+
+    total_snippets = sum(len(v) for v in snippets_map.values())
+    logger.info(
+        "%d fontes encontradas, %d trechos extraídos para citação literal",
+        len(enriched),
+        total_snippets,
+    )
+
+    context = (
+        build_sources_context(all_articles, all_patents, snippets_map=snippets_map)
+        or ""
+    )
+    return context, snippets_map
 
 
 def generate_report(topic: str) -> str:
@@ -333,18 +419,26 @@ def generate_report(topic: str) -> str:
             "Configure um provedor para gerar resposta baseada em fontes verificáveis."
         )
 
-    sources_context = _collect_real_sources(topic)
+    from utils.fetcher import validate_quoted_citations
 
-    def _try_generate(retry: bool = False) -> tuple[str, list[str]]:
+    sources_context, snippets_map = _collect_real_sources(topic)
+
+    def _try_generate(retry: bool = False) -> tuple[str, list[str], list[str]]:
         report = call_openai(topic, sources_context=sources_context, retry=retry)
         validate_report_sources(report)
         sanitized, removed = sanitize_report_links(report, topic)
-        return sanitized, removed
+        # Valida citações literais ("...") contra snippets extraídos
+        citation_warnings: list[str] = []
+        if snippets_map:
+            sanitized, citation_warnings = validate_quoted_citations(
+                sanitized, snippets_map
+            )
+        return sanitized, removed, citation_warnings
 
-    sanitized_report, removed = _try_generate(retry=False)
+    sanitized_report, removed, citation_warnings = _try_generate(retry=False)
 
     if _count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
-        sanitized_report, removed = _try_generate(retry=True)
+        sanitized_report, removed, citation_warnings = _try_generate(retry=True)
 
     if _count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
         raise RuntimeError(
@@ -353,14 +447,25 @@ def generate_report(topic: str) -> str:
             "ou integre uma ferramenta de busca real (ex.: Crossref, SerpAPI) para obter referências verificadas."
         )
 
+    # Monta avisos acumulados
+    warnings: list[str] = []
     if removed:
-        warning = (
+        warnings.append(
             "> **Aviso de validação de fontes:** alguns links gerados pelo modelo "
             "não foram confirmados como válidos ou relevantes ao tema e foram "
             "substituídos por `[fonte não verificada]`. "
-            "Recomenda-se revisão manual das referências.\n\n"
+            "Recomenda-se revisão manual das referências."
         )
-        sanitized_report = warning + sanitized_report
+    if citation_warnings:
+        warnings.append(
+            "> **Aviso de citações literais:** alguns trechos entre aspas não foram "
+            "encontrados nos textos das fontes e foram marcados como "
+            "`[citação não verificada na fonte]`. "
+            "Recomenda-se verificar manualmente."
+        )
+
+    if warnings:
+        sanitized_report = "\n\n".join(warnings) + "\n\n" + sanitized_report
 
     return sanitized_report
 

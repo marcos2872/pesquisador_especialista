@@ -2,7 +2,7 @@
 
 ## Comandos operacionais deste repositório
 
-O projeto não possui `Makefile`, `pyproject.toml`, suíte de testes, lint ou build formal definidos no repositório.
+O projeto possui suíte de testes pytest (59 testes).
 
 ### Executar aplicação
 
@@ -17,9 +17,18 @@ Alternativa sem `uv`:
 python3 app.py
 ```
 
+### Executar testes
+
+```bash
+uv run pytest
+```
+
 ### Executar um teste único
 
-Atualmente não há runner de testes automatizados configurado no repositório.  
+```bash
+uv run pytest tests/test_academic.py -k "test_search_crossref"
+```
+
 Para validar uma execução específica, use teste manual da rota:
 
 ```bash
@@ -34,7 +43,7 @@ O projeto é uma aplicação web simples com backend Python (stdlib) e frontend 
 
 1. `app.py` concentra servidor HTTP, roteamento, integração com OpenAI/Azure e geração de relatório.
 2. `static/index.html` entrega UI única, envia `POST /api/research` e renderiza Markdown com `marked` + sanitização via `DOMPurify`.
-3. `agent/prompt.md` define o prompt de sistema principal usado nas chamadas ao modelo.
+3. `agent/systemprompt.md` define o prompt de sistema; `agent/userprompt.md` define o template de prompt do usuário.
 
 ### Fluxo principal
 
@@ -43,12 +52,14 @@ flowchart TD
     A[Usuario preenche tema na UI] --> B[POST /api/research]
     B --> C[Handler em app.py valida JSON e topic]
     C --> D{OPENAI_API_KEY definida?}
-    D -- Nao --> E[generate_demo_report]
-    D -- Sim --> F[call_openai -> /responses]
-    F --> G[extract_openai_text]
-    E --> H[JSON topic + report]
-    G --> H
-    H --> I[Frontend renderiza Markdown sanitizado]
+    D -- Nao --> E[Erro 502: sem chave]
+    D -- Sim --> F[_collect_real_sources<br/>busca Crossref/OpenAlex/arXiv/patentes]
+    F --> G[call_openai -> /responses]
+    G --> H[extract_openai_text]
+    H --> I[validate_report_sources]
+    I --> J[sanitize_report_links]
+    J --> K[JSON topic + report]
+    K --> L[Frontend renderiza Markdown sanitizado]
 ```
 
 ## Convenções específicas do código
@@ -65,9 +76,9 @@ flowchart TD
 
 ### Prompt e geração de conteúdo
 
-- O prompt-base vem de `agent/prompt.md`; se ausente, há fallback hardcoded em `app.py`.
+- O prompt-base vem de `agent/systemprompt.md` e `agent/userprompt.md`; se ausentes, há fallback hardcoded em `app.py`.
 - A mensagem de usuário é montada por `build_user_prompt()` com estrutura obrigatória de seções e exigência de citações por link.
-- Sem `OPENAI_API_KEY`, o sistema **sempre** entra em modo demonstração (`generate_demo_report`), mantendo o formato de saída.
+- Sem `OPENAI_API_KEY`, o sistema retorna erro 502. Configure um provedor OpenAI/Azure para usar.
 
 ### Integração OpenAI/Azure
 

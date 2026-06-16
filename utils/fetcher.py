@@ -1,30 +1,84 @@
 #!/usr/bin/env python3
 """
-Módulo responsável por baixar e extrair texto de URLs (HTML e PDF).
+Módulo responsável por baixar e extrair texto de URLs (HTML e PDF),
+validar relevância e extrair trechos literais (snippets) para citações.
 """
 
 import json
+import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+logger = logging.getLogger("pesquisador.fetcher")
+
 # Palavras comuns em inglês/português que não ajudam na relevância
 _STOPWORDS = {
-    "a", "an", "the", "and", "or", "of", "for", "in", "on", "at", "to", "from",
-    "by", "with", "about", "as", "is", "are", "was", "were", "be", "been",
-    "o", "a", "os", "as", "um", "uma", "de", "do", "da", "dos", "das", "em",
-    "no", "na", "nos", "nas", "por", "para", "com", "sem", "sobre", "entre",
-    "e", "ou", "que", "se", "como", "mas", "mais", "menos", "muito", "pouco",
+    "a",
+    "an",
+    "the",
+    "and",
+    "or",
+    "of",
+    "for",
+    "in",
+    "on",
+    "at",
+    "to",
+    "from",
+    "by",
+    "with",
+    "about",
+    "as",
+    "is",
+    "are",
+    "was",
+    "were",
+    "be",
+    "been",
+    "o",
+    "a",
+    "os",
+    "as",
+    "um",
+    "uma",
+    "de",
+    "do",
+    "da",
+    "dos",
+    "das",
+    "em",
+    "no",
+    "na",
+    "nos",
+    "nas",
+    "por",
+    "para",
+    "com",
+    "sem",
+    "sobre",
+    "entre",
+    "e",
+    "ou",
+    "que",
+    "se",
+    "como",
+    "mas",
+    "mais",
+    "menos",
+    "muito",
+    "pouco",
 }
 
 # User-agent exigido/recomendado pela Crossref API
 _CROSSREF_USER_AGENT = "PesquisadorEspecialista/1.0 (mailto:pesquisador@example.com)"
 
 # Timeout padrão para requisições (segundos)
-DEFAULT_TIMEOUT = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "30"))
+DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 
 # User-agent para evitar bloqueio básico
 USER_AGENT = "Mozilla/5.0 (compatible; PesquisadorEspecialista/1.0)"
@@ -136,7 +190,9 @@ def _extract_keywords(topic: str) -> set[str]:
     return keywords
 
 
-def _content_matches_topic(text: str, topic_keywords: set[str], min_matches: int = 2) -> bool:
+def _content_matches_topic(
+    text: str, topic_keywords: set[str], min_matches: int = 2
+) -> bool:
     """
     Verifica se o texto baixado contém palavras-chave do tema.
     Exige pelo menos min_matches palavras distintas para considerar relevante.
@@ -157,7 +213,9 @@ def _extract_doi(url: str) -> Optional[str]:
     return match.group(0) if match else None
 
 
-def _validate_doi_via_crossref(doi: str, topic_keywords: set[str], timeout: int) -> tuple[bool, str]:
+def _validate_doi_via_crossref(
+    doi: str, topic_keywords: set[str], timeout: int
+) -> tuple[bool, str]:
     """
     Valida um DOI usando a API Crossref e verifica relevância pelo título/resumo.
     """
@@ -231,3 +289,312 @@ def validate_url_relevance(
         return False, "Conteúdo da URL não parece relacionado ao tema"
 
     return True, ""
+
+
+# ── Extração de trechos literais (snippets) para citações ──────────────
+
+_MAX_SNIPPET_CHARS = 1200
+_MAX_SNIPPETS_PER_SOURCE = 5
+_CONTEXT_WINDOW = 80  # caracteres antes/depois do match
+
+
+def _extract_snippets_around_keywords(
+    text: str,
+    keywords: set[str],
+    max_snippets: int = _MAX_SNIPPETS_PER_SOURCE,
+    context_window: int = _CONTEXT_WINDOW,
+) -> list[str]:
+    """
+    Extrai trechos do texto ao redor das palavras-chave do tópico.
+    Cada snippet é uma janela de contexto ao redor de uma ocorrência de keyword.
+    """
+    if not text or not keywords:
+        return []
+
+    text_lower = text.lower()
+    snippets: list[str] = []
+    seen_spans: set[tuple[int, int]] = set()
+
+    for kw in keywords:
+        start = 0
+        while len(snippets) < max_snippets:
+            idx = text_lower.find(kw, start)
+            if idx == -1:
+                break
+
+            snippet_start = max(0, idx - context_window)
+            snippet_end = min(len(text), idx + len(kw) + context_window)
+            span = (snippet_start, snippet_end)
+
+            if span not in seen_spans:
+                seen_spans.add(span)
+                snippet = text[snippet_start:snippet_end].strip()
+                # Garante que o snippet começa e termina em palavra completa
+                if snippet_start > 0:
+                    snippet = "…" + snippet
+                if snippet_end < len(text):
+                    snippet = snippet + "…"
+                if len(snippet) >= 40:
+                    snippets.append(snippet)
+
+            start = idx + len(kw)
+
+    return snippets
+
+
+def _deduplicate_snippets(snippets: list[str]) -> list[str]:
+    """Remove snippets com alta sobreposição de conteúdo."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for s in snippets:
+        key = s[50:150] if len(s) > 50 else s
+        if key not in seen:
+            seen.add(key)
+            result.append(s)
+    return result
+
+
+def _build_expanded_queries(topic: str) -> list[str]:
+    """
+    Gera queries de busca expandidas (EN + PT) para melhorar cobertura.
+    Usa heurísticas de tradução de termos técnicos comuns.
+    """
+    translations = {
+        "ligas": "alloys",
+        "alumínio": "aluminum",
+        "aluminio": "aluminum",
+        "grafeno": "graphene",
+        "compósitos": "composites",
+        "compositos": "composites",
+        "polímero": "polymer",
+        "polimero": "polymer",
+        "nanocompósitos": "nanocomposites",
+        "nanocompositos": "nanocomposites",
+        "baterias": "batteries",
+        "revestimento": "coating",
+        "extrusora": "extruder",
+        "manufatura": "manufacturing",
+        "aditiva": "additive",
+        "impressão": "printing",
+        "3d": "3d",
+        "biomateriais": "biomaterials",
+        "células": "cells",
+        "aço": "steel",
+        "aco": "steel",
+        "cerâmica": "ceramic",
+        "ceramica": "ceramic",
+        "soldagem": "welding",
+        "corrosão": "corrosion",
+        "corrosao": "corrosion",
+        "térmico": "thermal",
+        "termico": "thermal",
+        "mecânico": "mechanical",
+        "mecanico": "mechanical",
+        "elétrico": "electrical",
+        "eletrico": "electrical",
+        "superfície": "surface",
+        "superficie": "surface",
+        "tratamento": "treatment",
+        "simulação": "simulation",
+        "simulacao": "simulation",
+        "modelagem": "modeling",
+        "otimização": "optimization",
+        "otimizacao": "optimization",
+        "sensores": "sensors",
+        "catálise": "catalysis",
+        "catalise": "catalysis",
+        "fotovoltaico": "photovoltaic",
+        "hidrogênio": "hydrogen",
+        "hidrogenio": "hydrogen",
+        "biomedicina": "biomedical",
+        "fármaco": "drug",
+        "farmaco": "drug",
+        "entrega": "delivery",
+        "tecido": "tissue",
+        "ósseo": "bone",
+        "osseo": "bone",
+        "regeneração": "regeneration",
+        "regeneracao": "regeneration",
+        "membrana": "membrane",
+        "filtração": "filtration",
+        "filtracao": "filtration",
+        "adsorção": "adsorption",
+        "adsorcao": "adsorption",
+        "catodo": "cathode",
+        "anodo": "anode",
+        "eletrólito": "electrolyte",
+        "eletrolito": "electrolyte",
+        "robótica": "robotics",
+        "robotica": "robotics",
+        "inteligência": "intelligence",
+        "inteligencia": "intelligence",
+        "artificial": "artificial",
+        "aprendizado": "learning",
+        "máquina": "machine",
+        "maquina": "machine",
+        "profundo": "deep",
+        "rede": "network",
+        "neural": "neural",
+        "processamento": "processing",
+        "linguagem": "language",
+        "natural": "natural",
+        "visão": "vision",
+        "visao": "vision",
+        "computacional": "computational",
+    }
+
+    # Gera versão em inglês do tópico
+    english_tokens: list[str] = []
+    for word in re.split(r"[\s/]+", topic.lower().strip()):
+        english_tokens.append(translations.get(word, word))
+    english_topic = " ".join(english_tokens)
+
+    queries = [topic.strip(), english_topic]
+
+    # Gera variantes com conectores técnicos comuns
+    for connector in (
+        "review",
+        "overview",
+        "recent advances",
+        "state of the art",
+        "properties",
+        "applications",
+        "synthesis",
+        "characterization",
+    ):
+        queries.append(f"{english_topic} {connector}")
+
+    # Remove duplicatas preservando ordem
+    seen: set[str] = set()
+    unique: list[str] = []
+    for q in queries:
+        q_clean = q.strip()
+        if q_clean and q_clean.lower() not in seen:
+            seen.add(q_clean.lower())
+            unique.append(q_clean)
+
+    return unique[:6]  # Limita a 6 queries para não sobrecarregar
+
+
+def generate_query_variants(topic: str) -> list[str]:
+    """
+    Interface pública: gera queries expandidas para busca.
+    Usa heurísticas + poderia ser estendido com chamada ao LLM.
+    """
+    return _build_expanded_queries(topic)
+
+
+def download_source_texts(
+    sources: list[dict],
+    topic: str,
+    timeout: int = DEFAULT_TIMEOUT,
+    max_workers: int = 3,
+) -> list[dict]:
+    """
+    Baixa PDFs/textos das fontes e extrai trechos literais relevantes ao tópico.
+
+    Cada entrada em `sources` deve ter ao menos 'url' (str) e 'title' (str).
+    Opcional: 'pdf_url', 'doi'.
+
+    Retorna a mesma lista enriquecida com o campo 'snippets' (list[str]).
+    """
+    if not sources:
+        return sources
+
+    keywords = _extract_keywords(topic)
+    if not keywords:
+        return sources
+
+    def _fetch_one(source: dict) -> dict:
+        result = dict(source)
+        result.setdefault("snippets", [])
+
+        # Prioriza PDF explícito, depois URL principal
+        urls_to_try = []
+        for key in ("pdf_url", "url"):
+            val = source.get(key)
+            if val and isinstance(val, str) and val.startswith("http"):
+                urls_to_try.append(val)
+
+        for url in urls_to_try:
+            if result["snippets"]:
+                break
+            success, text, _ = fetch_url(url, timeout=timeout)
+            if not success or not text:
+                continue
+
+            raw_snippets = _extract_snippets_around_keywords(text, keywords)
+            result["snippets"] = _deduplicate_snippets(raw_snippets)
+            if result["snippets"]:
+                logger.debug(
+                    "%d snippets extraídos de %s",
+                    len(result["snippets"]),
+                    source.get("title", url)[:80],
+                )
+
+        return result
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_fetch_one, s): i for i, s in enumerate(sources)}
+        enriched = [dict(s) for s in sources]
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                enriched[idx] = future.result()
+            except Exception as exc:
+                logger.warning(
+                    "Falha ao baixar fonte %s: %s",
+                    sources[idx].get("title", "?")[:80],
+                    exc,
+                )
+
+    return enriched
+
+
+def validate_quoted_citations(
+    report: str,
+    source_snippets: dict[str, list[str]],
+) -> tuple[str, list[str]]:
+    """
+    Valida citações literais (entre aspas) contra os snippets das fontes.
+
+    Args:
+        report: Texto do relatório em Markdown.
+        source_snippets: Mapeamento url -> lista de snippets extraídos.
+
+    Returns:
+        (sanitized_report, warnings): relatório com marcações e lista de avisos.
+    """
+    # Encontra todas as citações entre aspas no relatório
+    quote_pattern = re.compile(r'"([^"]{30,})"')
+    all_snippets: list[str] = []
+    for snippets in source_snippets.values():
+        all_snippets.extend(snippets)
+
+    if not all_snippets:
+        return report, []
+
+    warnings: list[str] = []
+    sanitized = report
+
+    for match in quote_pattern.finditer(report):
+        quote = match.group(1)
+        # Verifica se o trecho (ou parte significativa dele) existe nos snippets
+        found = False
+        search_key = quote[:60].lower() if len(quote) > 60 else quote.lower()
+        for snippet in all_snippets:
+            if search_key in snippet.lower():
+                found = True
+                break
+
+        if not found:
+            warnings.append(
+                f'Citação não verificada: "{quote[:80]}{"..." if len(quote) > 80 else ""}"'
+            )
+            # Marca a citação como não verificada
+            sanitized = sanitized.replace(
+                f'"{quote}"',
+                f'"{quote}" [citação não verificada na fonte]',
+            )
+
+    return sanitized, warnings

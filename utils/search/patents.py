@@ -11,6 +11,7 @@ A funcao search_patents() combina resultados de todos os providers ativos.
 
 import base64
 import json
+import logging
 import os
 import re
 import time
@@ -19,6 +20,8 @@ from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger("pesquisador.patents")
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RESULTS = 3
@@ -48,7 +51,11 @@ class Patent:
         return bool(self.title and self.number and self.url)
 
     def short_citation(self) -> str:
-        inventors = ", ".join(self.inventors[:2]) if self.inventors else "Inventores não listados"
+        inventors = (
+            ", ".join(self.inventors[:2])
+            if self.inventors
+            else "Inventores não listados"
+        )
         if len(self.inventors) > 2:
             inventors += " et al."
         year = f" ({self.year})" if self.year else ""
@@ -77,7 +84,7 @@ def _http_get_text(url: str, headers: dict, timeout: int) -> Optional[str]:
         try:
             with urlopen(req, timeout=timeout) as response:
                 return response.read().decode("utf-8", errors="ignore")
-        except (HTTPError):
+        except HTTPError:
             return None
         except URLError:
             if attempt < _MAX_RETRIES:
@@ -87,7 +94,9 @@ def _http_get_text(url: str, headers: dict, timeout: int) -> Optional[str]:
     return None
 
 
-def _http_post_json(url: str, headers: dict, payload: dict, timeout: int) -> Optional[dict]:
+def _http_post_json(
+    url: str, headers: dict, payload: dict, timeout: int
+) -> Optional[dict]:
     for attempt in range(_MAX_RETRIES + 1):
         req = Request(
             url,
@@ -190,7 +199,13 @@ def _search_uspto(topic: str, max_results: int, timeout: int) -> list[Patent]:
     payload = {
         "q": topic,
         "rows": max_results,
-        "fields": ["patent_id", "patent_title", "patent_date", "inventors", "assignees"],
+        "fields": [
+            "patent_id",
+            "patent_title",
+            "patent_date",
+            "inventors",
+            "assignees",
+        ],
     }
     headers = {
         "X-API-Key": api_key,
@@ -216,7 +231,10 @@ def _search_uspto(topic: str, max_results: int, timeout: int) -> list[Patent]:
                 year = int(match.group(1))
         inventors = []
         for inv in item.get("inventors", []):
-            name = inv.get("inventor_name") or f"{inv.get('first_name', '')} {inv.get('last_name', '')}".strip()
+            name = (
+                inv.get("inventor_name")
+                or f"{inv.get('first_name', '')} {inv.get('last_name', '')}".strip()
+            )
             if name:
                 inventors.append(name)
         assignees = [
@@ -309,11 +327,13 @@ def _search_patentsview(topic: str, max_results: int, timeout: int) -> list[Pate
         ],
         "o": {"per_page": max_results},
     }
-    params = urlencode({
-        "q": json.dumps(query_payload["q"]),
-        "f": json.dumps(query_payload["f"]),
-        "o": json.dumps(query_payload["o"]),
-    })
+    params = urlencode(
+        {
+            "q": json.dumps(query_payload["q"]),
+            "f": json.dumps(query_payload["f"]),
+            "o": json.dumps(query_payload["o"]),
+        }
+    )
     url = f"{_PATENTSVIEW_BASE}?{params}"
     headers = {"Accept": "application/json"}
     data = _http_get_json(url, headers, timeout)
@@ -390,10 +410,11 @@ def search_patents(
       2. USPTO (gratis com USPTO_API_KEY)
       3. Lens.org (gratis com LENS_API_TOKEN)
       4. WIPO Patentscope (gratis com WIPO_API_KEY)
-      5. PatentsView (gratis, sem cadastro; atualmente descontinuado)
+      5. Google Patents via SerpAPI (gratis com chave opcional SERPAPI_API_KEY)
+      6. PatentsView (gratis, sem cadastro; atualmente descontinuado)
     """
-    from .wipo import search_wipo as _search_wipo_provider
     from .serpapi import search_google_patents as _search_google_patents
+    from .wipo import search_wipo as _search_wipo_provider
 
     collected: list[Patent] = []
     per_provider = max(3, max_results * 2)
@@ -408,7 +429,8 @@ def search_patents(
     ):
         try:
             results = provider(topic, per_provider, timeout)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Provider %s falhou: %s", provider.__name__, exc)
             results = []
         collected.extend(results)
 

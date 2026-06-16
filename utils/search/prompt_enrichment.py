@@ -3,6 +3,9 @@
 Formata fontes reais (artigos e patentes) em um trecho de contexto estruturado
 para ser injetado no prompt do modelo. O objetivo e fornecer ao LLM referencias
 verificaveis e reduzir a alucinacao de DOIs e numeros de patente.
+
+Agora também inclui trechos literais (snippets) extraídos dos PDFs para
+permitir citações com "..." baseadas no texto real dos documentos.
 """
 
 import os
@@ -14,6 +17,8 @@ from .patents import Patent
 DEFAULT_MAX_ARTICLES = int(os.getenv("SOURCES_MAX_ARTICLES", "50"))
 DEFAULT_MAX_PATENTS = int(os.getenv("SOURCES_MAX_PATENTS", "30"))
 DEFAULT_MAX_ABSTRACT_CHARS = int(os.getenv("SOURCES_MAX_ABSTRACT_CHARS", "600"))
+DEFAULT_MAX_SNIPPETS_PER_SOURCE = int(os.getenv("SOURCES_MAX_SNIPPETS", "3"))
+DEFAULT_MAX_SNIPPET_CHARS = int(os.getenv("SOURCES_MAX_SNIPPET_CHARS", "400"))
 
 
 def _format_article(article: Article, max_abstract: int) -> str:
@@ -31,7 +36,9 @@ def _format_article(article: Article, max_abstract: int) -> str:
         lines.append(f"  Publicação: {article.venue}")
     if article.doi:
         lines.append(f"  DOI: https://doi.org/{article.doi}")
-    if article.url and (not article.doi or article.url != f"https://doi.org/{article.doi}"):
+    if article.url and (
+        not article.doi or article.url != f"https://doi.org/{article.doi}"
+    ):
         lines.append(f"  URL: {article.url}")
     if article.abstract:
         abstract = article.abstract.strip().replace("\n", " ")
@@ -68,9 +75,22 @@ def build_sources_context(
     max_articles: int = DEFAULT_MAX_ARTICLES,
     max_patents: int = DEFAULT_MAX_PATENTS,
     max_abstract_chars: int = DEFAULT_MAX_ABSTRACT_CHARS,
+    snippets_map: Optional[dict[str, list[str]]] = None,
+    max_snippets: int = DEFAULT_MAX_SNIPPETS_PER_SOURCE,
+    max_snippet_chars: int = DEFAULT_MAX_SNIPPET_CHARS,
 ) -> Optional[str]:
     """
     Constroi o bloco de contexto a partir de artigos e patentes reais.
+
+    Args:
+        articles: Lista de artigos válidos.
+        patents: Lista de patentes válidas.
+        max_articles: Limite de artigos no contexto.
+        max_patents: Limite de patentes no contexto.
+        max_abstract_chars: Limite de caracteres do abstract.
+        snippets_map: Mapeamento url -> lista de trechos literais extraídos.
+        max_snippets: Quantidade máxima de snippets por fonte.
+        max_snippet_chars: Limite de caracteres por snippet.
 
     Retorna None se nao houver fonte alguma, ou string formatada com instrucoes
     para o modelo usar SOMENTE essas fontes.
@@ -81,22 +101,60 @@ def build_sources_context(
     if not articles and not patents:
         return None
 
+    snippets_map = snippets_map or {}
+
     sections: list[str] = [
-        "FONTS VERIFICADAS (use SOMENTE estas fontes para citar):",
+        "FONTES VERIFICADAS (use SOMENTE estas fontes para citar):",
         "Não invente, modifique ou adicione DOIs, números de patente ou URLs.",
         "Se uma afirmação não puder ser sustentada por estas fontes, omita a afirmação.",
+        "",
+        "REGRA DE CITAÇÃO LITERAL (OBRIGATÓRIO):",
+        'Para cada afirmação técnica relevante, inclua um trecho LITERAL entre aspas ("...")',
+        "extraído EXATAMENTE de uma das fontes listadas abaixo.",
+        'Exemplo correto: O estudo demonstrou que "the tensile strength increased by 42%',
+        'with 0.5 wt% graphene loading" [Fonte](https://doi.org/10.xxxx/xxxxx).',
+        "NÃO parafraseie trechos que estão disponíveis literalmente nas fontes.",
+        "Se o trecho literal não estiver disponível, use paráfrase e NÃO use aspas.",
     ]
+
+    sections.append('\n── TRECHOS LITERAIS DAS FONTES (use para citações com "...") ──')
+    sections.append(
+        "(Estes são os únicos trechos que podem ser citados literalmente.)\n"
+    )
 
     if articles:
         sections.append("\nARTIGOS:")
         for i, article in enumerate(articles, 1):
             sections.append(f"\n[{i}]")
             sections.append(_format_article(article, max_abstract_chars))
+            # Adiciona snippets se disponíveis
+            article_url = article.url or (
+                f"https://doi.org/{article.doi}" if article.doi else None
+            )
+            if article_url:
+                raw_snippets = snippets_map.get(article_url, [])
+                if raw_snippets:
+                    sections.append("  Trechos literais do documento:")
+                    for j, snippet in enumerate(raw_snippets[:max_snippets], 1):
+                        truncated = snippet[:max_snippet_chars]
+                        if len(snippet) > max_snippet_chars:
+                            truncated = truncated.rstrip() + "…"
+                        sections.append(f'    [{j}] "{truncated}"')
 
     if patents:
         sections.append("\n\nPATENTES:")
         for i, patent in enumerate(patents, 1):
             sections.append(f"\n[{i}]")
             sections.append(_format_patent(patent))
+            # Adiciona snippets se disponíveis
+            if patent.url:
+                raw_snippets = snippets_map.get(patent.url, [])
+                if raw_snippets:
+                    sections.append("  Trechos literais da patente:")
+                    for j, snippet in enumerate(raw_snippets[:max_snippets], 1):
+                        truncated = snippet[:max_snippet_chars]
+                        if len(snippet) > max_snippet_chars:
+                            truncated = truncated.rstrip() + "…"
+                        sections.append(f'    [{j}] "{truncated}"')
 
     return "\n".join(sections)

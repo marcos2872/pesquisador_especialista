@@ -13,6 +13,7 @@ e remove duplicatas por DOI/titulo.
 """
 
 import json
+import logging
 import os
 import re
 import time
@@ -22,6 +23,8 @@ from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger("pesquisador.academic")
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
 DEFAULT_MAX_RESULTS = 5
@@ -35,7 +38,10 @@ _ARXIV_BASE = "http://export.arxiv.org/api/query"
 _CORE_BASE = "https://api.core.ac.uk/v3"
 _SEMANTIC_SCHOLAR_BASE = "https://api.semanticscholar.org/graph/v1"
 _UNPAYWALL_BASE = "https://api.unpaywall.org/v2"
-_ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+_ARXIV_NS = {
+    "atom": "http://www.w3.org/2005/Atom",
+    "arxiv": "http://arxiv.org/schemas/atom",
+}
 _MAX_RETRIES = 2
 
 
@@ -55,7 +61,9 @@ class Article:
         return bool(self.title and (self.doi or self.url))
 
     def short_citation(self) -> str:
-        authors = ", ".join(self.authors[:3]) if self.authors else "Autores não listados"
+        authors = (
+            ", ".join(self.authors[:3]) if self.authors else "Autores não listados"
+        )
         if len(self.authors) > 3:
             authors += " et al."
         venue = f" ({self.venue})" if self.venue else ""
@@ -86,7 +94,7 @@ def _http_get_text(url: str, headers: dict, timeout: int) -> Optional[str]:
         try:
             with urlopen(req, timeout=timeout) as response:
                 return response.read().decode("utf-8", errors="ignore")
-        except (HTTPError):
+        except HTTPError:
             return None
         except URLError:
             if attempt < _MAX_RETRIES:
@@ -110,11 +118,13 @@ def _reconstruct_abstract(inverted_index: Optional[dict]) -> Optional[str]:
 
 
 def _search_crossref(topic: str, max_results: int, timeout: int) -> list[Article]:
-    params = urlencode({
-        "query.bibliographic": topic,
-        "rows": str(max_results),
-        "sort": "relevance",
-    })
+    params = urlencode(
+        {
+            "query.bibliographic": topic,
+            "rows": str(max_results),
+            "sort": "relevance",
+        }
+    )
     url = f"{_CROSSREF_BASE}/works?{params}"
     headers = {
         "User-Agent": f"pesquisador_especialista/1.0 (mailto:{DEFAULT_OPENALEX_EMAIL})",
@@ -159,11 +169,13 @@ def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article
         {"filter": f"title.search:{topic}"},
         {"search": topic},
     ):
-        params = urlencode({
-            **extra,
-            "per_page": str(max_results),
-            "sort": "cited_by_count:desc",
-        })
+        params = urlencode(
+            {
+                **extra,
+                "per_page": str(max_results),
+                "sort": "cited_by_count:desc",
+            }
+        )
         url = f"{_OPENALEX_BASE}/works?{params}"
         headers = {
             "User-Agent": f"pesquisador_especialista/1.0 (mailto:{DEFAULT_OPENALEX_EMAIL})",
@@ -189,10 +201,14 @@ def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article
                 for a in item.get("authorships", [])
                 if a.get("author", {}).get("display_name")
             ]
-            venue = (item.get("primary_location", {}).get("source") or {}).get("display_name")
+            venue = (item.get("primary_location", {}).get("source") or {}).get(
+                "display_name"
+            )
             articles.append(
                 Article(
-                    title=item.get("title") or item.get("display_name") or "(sem título)",
+                    title=item.get("title")
+                    or item.get("display_name")
+                    or "(sem título)",
                     authors=authors,
                     year=item.get("publication_year"),
                     venue=venue,
@@ -208,9 +224,14 @@ def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article
 
 
 def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
-    params = urlencode({"search_query": f"all:{topic}", "max_results": str(max_results)})
+    params = urlencode(
+        {"search_query": f"all:{topic}", "max_results": str(max_results)}
+    )
     url = f"{_ARXIV_BASE}?{params}"
-    headers = {"User-Agent": "pesquisador_especialista/1.0", "Accept": "application/atom+xml"}
+    headers = {
+        "User-Agent": "pesquisador_especialista/1.0",
+        "Accept": "application/atom+xml",
+    }
     raw = _http_get_text(url, headers, timeout)
     if not raw:
         return []
@@ -223,9 +244,17 @@ def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
     articles: list[Article] = []
     for entry in root.findall("atom:entry", _ARXIV_NS):
         title_el = entry.find("atom:title", _ARXIV_NS)
-        title = (title_el.text or "").strip().replace("\n", " ") if title_el is not None else ""
+        title = (
+            (title_el.text or "").strip().replace("\n", " ")
+            if title_el is not None
+            else ""
+        )
         summary_el = entry.find("atom:summary", _ARXIV_NS)
-        summary = (summary_el.text or "").strip().replace("\n", " ") if summary_el is not None else None
+        summary = (
+            (summary_el.text or "").strip().replace("\n", " ")
+            if summary_el is not None
+            else None
+        )
         published_el = entry.find("atom:published", _ARXIV_NS)
         year = None
         if published_el is not None and published_el.text:
@@ -236,7 +265,9 @@ def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
         arxiv_id = (id_el.text or "").strip() if id_el is not None else ""
         if not arxiv_id:
             continue
-        arxiv_id = arxiv_id.replace("http://arxiv.org/abs/", "").replace("https://arxiv.org/abs/", "")
+        arxiv_id = arxiv_id.replace("http://arxiv.org/abs/", "").replace(
+            "https://arxiv.org/abs/", ""
+        )
         authors = []
         for a in entry.findall("atom:author", _ARXIV_NS):
             name_el = a.find("atom:name", _ARXIV_NS)
@@ -299,7 +330,9 @@ def _search_core(topic: str, max_results: int, timeout: int) -> list[Article]:
     return articles
 
 
-def _search_semantic_scholar(topic: str, max_results: int, timeout: int) -> list[Article]:
+def _search_semantic_scholar(
+    topic: str, max_results: int, timeout: int
+) -> list[Article]:
     fields = "title,authors,year,venue,abstract,externalIds"
     params = urlencode({"query": topic, "limit": str(max_results), "fields": fields})
     url = f"{_SEMANTIC_SCHOLAR_BASE}/paper/search?{params}"
@@ -394,6 +427,7 @@ def search_articles(
       4. Core.ac.uk (gratis, sem cadastro)
       5. Semantic Scholar (gratis com chave opcional SEMANTIC_SCHOLAR_API_KEY)
       6. IEEE Xplore (gratis com chave opcional IEEE_API_KEY)
+      7. Google Scholar via SerpAPI (gratis com chave opcional SERPAPI_API_KEY)
     """
     from .ieee import search_ieee as _search_ieee_provider
     from .serpapi import search_google_scholar as _search_google_scholar
@@ -412,7 +446,8 @@ def search_articles(
     ):
         try:
             results = provider(topic, per_provider, timeout)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Provider %s falhou: %s", provider.__name__, exc)
             results = []
         collected.extend(results)
 
