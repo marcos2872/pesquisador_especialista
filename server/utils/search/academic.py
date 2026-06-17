@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Busca de artigos academicos em multiplas APIs gratuitas:
-  - Crossref (gratis, sem cadastro, primario)
-  - OpenAlex (gratis, sem cadastro, com email no user-agent)
-  - arXiv (gratis, sem cadastro)
-  - Core.ac.uk (gratis, sem cadastro)
-  - Semantic Scholar (gratis com cadastro; opcional)
-  - Unpaywall (gratis com email; opcional, enriquece com link de PDF)
-  - IEEE Xplore (gratis com cadastro; opcional)
-  - Google Scholar via SerpAPI (gratis com cadastro; opcional)
+Busca de artigos acadêmicos em múltiplas APIs gratuitas.
 
-A funcao search_articles() combina resultados de todos os providers ativos
-em paralelo, remove duplicatas por DOI/titulo e respeita max_results.
+Provedores disponíveis (todos gratuitos):
+  - Crossref: sem cadastro, primário, alta cobertura
+  - OpenAlex: sem cadastro, bom para artigos recentes
+  - arXiv: sem cadastro, foco em preprint (física, cs, matemática)
+  - Core.ac.uk: sem cadastro, agrega repositórios institucionais
+  - Semantic Scholar: gratuito com chave opcional
+  - Unpaywall: enriquece com link de PDF (requer email)
+  - IEEE Xplore: gratuito com chave (IEEE_API_KEY)
+  - Google Scholar via SerpAPI: gratuito com chave (SERPAPI_API_KEY)
+
+A função search_articles() roda todos os providers ativos em paralelo
+(ThreadPoolExecutor), remove duplicatas por DOI/título e respeita o
+limite max_results.
 """
 
 import logging
@@ -33,12 +36,14 @@ DEFAULT_OPENALEX_EMAIL = os.getenv("OPENALEX_USER_AGENT", "pesquisador@example.c
 DEFAULT_UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "")
 _SEMANTIC_SCHOLAR_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
 
+# URLs base das APIs
 _OPENALEX_BASE = "https://api.openalex.org"
 _CROSSREF_BASE = "https://api.crossref.org"
 _ARXIV_BASE = "http://export.arxiv.org/api/query"
 _CORE_BASE = "https://api.core.ac.uk/v3"
 _SEMANTIC_SCHOLAR_BASE = "https://api.semanticscholar.org/graph/v1"
 _UNPAYWALL_BASE = "https://api.unpaywall.org/v2"
+# Namespace XML do arXiv para parsing
 _ARXIV_NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "arxiv": "http://arxiv.org/schemas/atom",
@@ -59,6 +64,7 @@ def _reconstruct_abstract(inverted_index: Optional[dict]) -> Optional[str]:
 
 
 def _search_crossref(topic: str, max_results: int, timeout: int) -> list[Article]:
+    """Busca artigos na API Crossref (gratuita, sem cadastro)."""
     params = urlencode(
         {
             "query.bibliographic": topic,
@@ -106,6 +112,12 @@ def _search_crossref(topic: str, max_results: int, timeout: int) -> list[Article
 
 
 def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article]:
+    """
+    Busca artigos na API OpenAlex (gratuita, sem cadastro).
+
+    Tenta duas estratégias: filtro por título (mais preciso) e busca
+    textual (mais abrangente). Usa a que retornar resultados primeiro.
+    """
     for extra in (
         {"filter": f"title.search:{topic}"},
         {"search": topic},
@@ -165,6 +177,7 @@ def _search_openalex(topic: str, max_results: int, timeout: int) -> list[Article
 
 
 def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
+    """Busca preprints na API arXiv (gratuita, sem cadastro, retorna XML)."""
     params = urlencode(
         {"search_query": f"all:{topic}", "max_results": str(max_results)}
     )
@@ -234,6 +247,7 @@ def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
 
 
 def _search_core(topic: str, max_results: int, timeout: int) -> list[Article]:
+    """Busca artigos na API CORE (repositórios institucionais, gratuita)."""
     params = urlencode({"q": topic, "limit": str(max_results)})
     url = f"{_CORE_BASE}/search/works?{params}"
     headers = {"Accept": "application/json"}
@@ -274,6 +288,12 @@ def _search_core(topic: str, max_results: int, timeout: int) -> list[Article]:
 def _search_semantic_scholar(
     topic: str, max_results: int, timeout: int
 ) -> list[Article]:
+    """
+    Busca artigos na API Semantic Scholar.
+
+    Requer SEMANTIC_SCHOLAR_API_KEY (opcional). Sem a chave, ainda funciona
+    mas com limite de taxa mais restritivo.
+    """
     fields = "title,authors,year,venue,abstract,externalIds"
     params = urlencode({"query": topic, "limit": str(max_results), "fields": fields})
     url = f"{_SEMANTIC_SCHOLAR_BASE}/paper/search?{params}"
@@ -312,7 +332,12 @@ def _search_semantic_scholar(
 
 
 def _enrich_with_unpaywall(articles: list[Article], timeout: int) -> list[Article]:
-    """Tenta adicionar link de PDF gratuito via Unpaywall para artigos com DOI."""
+    """
+    Enriquece artigos com link de PDF gratuito via Unpaywall.
+
+    Requer UNPAYWALL_EMAIL configurado. O Unpaywall consulta repositórios
+    de acesso aberto para encontrar versões gratuitas dos artigos.
+    """
     if not DEFAULT_UNPAYWALL_EMAIL or "@" not in DEFAULT_UNPAYWALL_EMAIL:
         return articles
 
@@ -336,7 +361,13 @@ def _enrich_with_unpaywall(articles: list[Article], timeout: int) -> list[Articl
 
 
 def _dedup_articles(articles: list[Article]) -> list[Article]:
-    """Remove duplicatas por DOI ou titulo normalizado, preservando primeira ocorrencia."""
+    """
+    Remove duplicatas por DOI ou título normalizado.
+
+    A normalização remove caracteres não-alfanuméricos para comparar
+    títulos de forma flexível (ex.: "Screw-Extruder" == "Screw Extruder").
+    Preserva a primeira ocorrência de cada artigo.
+    """
     seen_doi: set[str] = set()
     seen_titles: set[str] = set()
     result: list[Article] = []
@@ -362,17 +393,14 @@ def search_articles(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[Article]:
     """
-    Busca artigos reais para o topico. Combina resultados de varias APIs gratuitas
-    em paralelo, remove duplicatas e retorna ate max_results artigos validos.
+    Busca artigos reais para o tópico combinando múltiplas APIs gratuitas.
 
-    Providers ativos:
-      1. Crossref (gratis, sem cadastro)
-      2. OpenAlex (gratis, sem cadastro)
-      3. arXiv (gratis, sem cadastro)
-      4. Core.ac.uk (gratis, sem cadastro)
-      5. Semantic Scholar (gratis com chave opcional SEMANTIC_SCHOLAR_API_KEY)
-      6. IEEE Xplore (gratis com chave opcional IEEE_API_KEY)
-      7. Google Scholar via SerpAPI (gratis com chave opcional SERPAPI_API_KEY)
+    Roda todos os providers ativos em paralelo, mescla resultados,
+    remove duplicatas (DOI/título) e retorna até max_results artigos
+    válidos (com título E link).
+
+    Providers ativos: Crossref, OpenAlex, arXiv, Core.ac.uk,
+    Semantic Scholar, IEEE Xplore, Google Scholar.
     """
     from .ieee import search_ieee as _search_ieee_provider
     from .serpapi import search_google_scholar as _search_google_scholar

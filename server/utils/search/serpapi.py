@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
 Busca no Google Scholar via SerpAPI.
-Requer cadastro em https://serpapi.com para obter a chave de API.
+
+Requer cadastro em https://serpapi.com para obter SERPAPI_API_KEY.
+Se a chave não estiver configurada, retorna lista vazia silenciosamente.
+
+Os resultados incluem título, link, autores, ano, veículo e snippet.
+Autores/ano/veículo são extraídos heuristicamente do campo
+publication_info.summary (ex.: "Smith, J, 2023, Journal of X").
 """
 
 import os
@@ -18,6 +24,7 @@ _SERPAPI_BASE = "https://serpapi.com/search"
 
 
 def _build_url(engine: str, topic: str, max_results: int) -> str:
+    """Monta URL de busca SerpAPI com engine, query e chave de API."""
     api_key = os.getenv("SERPAPI_API_KEY", "")
     params = {
         "engine": engine,
@@ -33,6 +40,12 @@ def search_google_scholar(
     max_results: int = DEFAULT_MAX_RESULTS,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[Article]:
+    """
+    Busca artigos no Google Scholar via SerpAPI.
+
+    Extrai autores, ano e veículo do campo publication_info.summary usando
+    heurísticas de formatação típica do Google Scholar.
+    """
     api_key = os.getenv("SERPAPI_API_KEY", "")
     if not api_key:
         return []
@@ -50,6 +63,7 @@ def search_google_scholar(
 
         link = item.get("link") or ""
 
+        # Extrai autores, ano e veículo do summary (ex.: "Smith, J, 2023, Journal")
         pub_info = item.get("publication_info") or {}
         summary = pub_info.get("summary") or ""
         authors: list[str] = []

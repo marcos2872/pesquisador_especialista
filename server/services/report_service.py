@@ -1,4 +1,19 @@
-"""Serviço de geração e sanitização de relatórios."""
+"""
+Serviço de sanitização de relatórios gerados pela IA.
+
+A IA pode inventar URLs, DOIs e números de patente (alucinação). Este
+módulo valida cada link do relatório Markdown gerado, removendo ou
+substituindo aqueles que não puderem ser verificados como fontes reais
+e relevantes ao tema.
+
+Estratégia:
+  1. URLs vindas do contexto de fontes coletadas (collected_urls) são
+     pré-aprovadas — já passaram pela verificação na busca acadêmica.
+  2. URLs não coletadas são validadas em tempo real via Crossref (para
+     DOIs) ou por download e análise de conteúdo.
+  3. Links inválidos são substituídos por "[fonte não verificada]" e a
+     seção de referências é reconstruída apenas com links válidos.
+"""
 
 import re
 
@@ -17,17 +32,21 @@ def sanitize_report_links(
     """
     Sanitiza links do relatório, removendo/substituindo URLs inválidas ou irrelevantes.
 
-    URLs que vieram do contexto de fontes coletadas (collected_urls) são pré-aprovadas
-    — já foram verificadas durante a busca acadêmica.
+    Args:
+        report: Relatório Markdown gerado pela IA
+        topic: Tópico da pesquisa (para validar relevância)
+        url_validator: Função de validação (padrão: validate_url_relevance)
+        collected_urls: URLs de fontes reais coletadas (pré-aprovadas)
 
     Returns:
-        (sanitized_report, removed_urls)
+        (relatório sanitizado, lista de URLs removidas)
     """
     if url_validator is None:
         url_validator = validate_url_relevance
     if collected_urls is None:
         collected_urls = set()
 
+    # Remove marcações genéricas do sistema
     report = re.sub(r"\[sem validação externa\]", "", report, flags=re.IGNORECASE)
 
     links = list(dict.fromkeys(MARKDOWN_LINK_PATTERN.findall(report)))
@@ -38,6 +57,7 @@ def sanitize_report_links(
     removed: list = []
 
     for text, url in links:
+        # Filtra URLs de homepages/buscas (não são fontes primárias)
         if _is_search_or_home_url(url):
             removed.append(f"{url} (link de busca/homepage)")
             continue
@@ -47,7 +67,7 @@ def sanitize_report_links(
             valid_urls.add(url)
             continue
 
-        # Para URLs não coletadas (possivelmente inventadas pela IA), faz validação completa
+        # URLs não coletadas (possivelmente inventadas pela IA) são validadas agora
         is_valid, reason = url_validator(url, topic, timeout=15)
         if is_valid:
             valid_urls.add(url)
@@ -57,7 +77,7 @@ def sanitize_report_links(
     if not removed:
         return report, []
 
-    # Substitui links inválidos por '[fonte não verificada]'
+    # Substitui links inválidos por '[fonte não verificada]' (mantém o texto visível)
     sanitized = report
     for text, url in links:
         if url not in valid_urls:
@@ -67,7 +87,7 @@ def sanitize_report_links(
                 sanitized,
             )
 
-    # Remove seção 6 de referências anterior
+    # Reconstrói a seção 6 apenas com fontes válidas
     reference_header_pattern = re.compile(
         r"\n##\s+6\.\s+Referências.*$", re.IGNORECASE | re.DOTALL
     )

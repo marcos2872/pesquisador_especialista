@@ -1,4 +1,17 @@
-"""Serviço de pesquisa - orquestra busca de fontes e geração de relatório."""
+"""
+Serviço de pesquisa — orquestra busca de fontes e geração de relatório.
+
+Este é o módulo central da aplicação. O fluxo é:
+
+  1. Coleta fontes reais via APIs acadêmicas (source_collector)
+  2. Envia tópico + contexto de fontes para a IA (ai_service)
+  3. Valida e sanitiza os links do relatório (report_service)
+  4. Se poucas fontes válidas, faz uma segunda tentativa (retry)
+  5. Retorna o relatório final em Markdown
+
+Cada serviço é recebido como argumento opcional (injeção de dependência
+manual) para facilitar testes com mocks.
+"""
 
 from .ai_service import call_openai
 from .report_service import sanitize_report_links
@@ -20,9 +33,9 @@ def generate_report(
 
     Args:
         topic: Tópico da pesquisa
-        ai_service: Serviço de IA (call_openai)
-        source_collector: Coletor de fontes (_collect_real_sources)
-        sanitizer: Sanitizador de links (sanitize_report_links)
+        ai_service: Função que chama a OpenAI (call_openai)
+        source_collector: Função que coleta fontes reais
+        sanitizer: Função que sanitiza links do relatório
         prompt_template: Template do prompt de sistema
 
     Returns:
@@ -35,10 +48,11 @@ def generate_report(
     if sanitizer is None:
         sanitizer = sanitize_report_links
 
-    # Coleta fontes reais
+    # Passo 1: Coleta fontes reais de artigos e patentes
     sources_context, snippets_map = source_collector(topic)
 
-    # Extrai URLs das fontes coletadas para pré-aprovação na sanitização
+    # Passo 1.5: Extrai URLs das fontes coletadas para usar como whitelist
+    # na sanitização — URLs verificadas são pré-aprovadas.
     collected_urls: set[str] = set()
     for line in sources_context.splitlines():
         if line.strip().startswith("URL:") or line.strip().startswith("Link:"):
@@ -53,6 +67,7 @@ def generate_report(
                 collected_urls.add(f"https://doi.org/{doi_value}")
 
     def _try_generate(retry: bool = False) -> tuple[str, list[str], list[str]]:
+        """Tenta uma geração: IA → validação → sanitização."""
         report = ai_service(
             topic,
             sources_context=sources_context,
@@ -63,15 +78,19 @@ def generate_report(
         sanitized, removed = sanitizer(report, topic, collected_urls=collected_urls)
         return sanitized, removed, []
 
+    # Passo 2: Geração inicial
     sanitized_report, removed, _ = _try_generate(retry=False)
 
-    # Só exige número mínimo de fontes verificadas se a busca real encontrou fontes.
-    # Quando o contexto está vazio, a IA não teve fontes reais para citar —
-    # não faz sentido reprovar o relatório por isso.
+    # Passo 3: Se encontrou poucas fontes verificáveis, tenta com retry
+    # O retry usa um prompt mais rigoroso instruindo o modelo a ser mais
+    # conservador ao citar fontes.
+    # Só reprova se havia fontes reais para citar — se o contexto estava
+    # vazio, a IA não tinha fontes para usar e não faz sentido punir.
     has_real_sources = bool(sources_context.strip())
     if has_real_sources and count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
         sanitized_report, removed, _ = _try_generate(retry=True)
 
+    # Se mesmo com retry não atingiu o mínimo, levanta erro
     if has_real_sources and count_unique_sources(sanitized_report) < MIN_UNIQUE_SOURCES:
         raise RuntimeError(
             "A resposta trouxe poucas fontes que puderam ser verificadas como reais e relevantes. "
@@ -79,7 +98,7 @@ def generate_report(
             "ou integre uma ferramenta de busca real (ex.: Crossref, SerpAPI) para obter referências verificadas."
         )
 
-    # Monta avisos
+    # Passo 4: Adiciona avisos no topo se links foram removidos
     warnings: list = []
     if removed:
         warnings.append(

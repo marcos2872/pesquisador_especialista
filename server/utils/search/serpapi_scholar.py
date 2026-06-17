@@ -28,7 +28,12 @@ def _build_url(params: dict) -> str:
 def _parse_publication_summary(
     summary: str,
 ) -> tuple[list[str], Optional[int], Optional[str]]:
-    """Extrai authors, year e venue de uma string de publication_info.summary."""
+    """
+    Extrai autores, ano e veículo de uma string publication_info.summary.
+
+    O Google Scholar formata o summary como "Sobrenome, I, 2023, Journal of X".
+    Esta função faz parse heurístico desse formato.
+    """
     authors: list[str] = []
     year: Optional[int] = None
     venue: Optional[str] = None
@@ -36,6 +41,7 @@ def _parse_publication_summary(
     if not summary:
         return authors, year, venue
 
+    # Extrai ano (primeiro número de 4 dígitos entre 1900-2099)
     year_match = re.search(r"\b(19\d{2}|20\d{2})\b", summary)
     if year_match:
         year = int(year_match.group(1))

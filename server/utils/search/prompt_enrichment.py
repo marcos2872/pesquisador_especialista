@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """
-Formata fontes reais (artigos e patentes) em um trecho de contexto estruturado
-para ser injetado no prompt do modelo. O objetivo e fornecer ao LLM referencias
-verificaveis e reduzir a alucinacao de DOIs e numeros de patente.
+Formata fontes reais (artigos e patentes) em contexto estruturado para o LLM.
 
-Agora também inclui trechos literais (snippets) extraídos dos PDFs para
-permitir citações com "..." baseadas no texto real dos documentos.
+Este módulo constrói o bloco "FONTES VERIFICADAS" que é injetado no prompt
+do modelo. O objetivo é fornecer à IA referências verificáveis e reduzir
+a alucinação de DOIs e números de patente.
+
+Cada fonte inclui:
+  - Título, autores, ano, periódico/escritório
+  - DOI ou número de patente com link direto
+  - Resumo (abstract)
+  - Trechos literais (snippets) extraídos dos PDFs para citações com aspas
+
+O formato final instrui o modelo a usar SOMENTE as fontes listadas.
 """
 
 import os
@@ -14,6 +21,7 @@ from typing import Optional
 from server.models.article import Article
 from server.models.patent import Patent
 
+# Limites configuráveis por variáveis de ambiente
 DEFAULT_MAX_ARTICLES = int(os.getenv("SOURCES_MAX_ARTICLES", "50"))
 DEFAULT_MAX_PATENTS = int(os.getenv("SOURCES_MAX_PATENTS", "30"))
 DEFAULT_MAX_ABSTRACT_CHARS = int(os.getenv("SOURCES_MAX_ABSTRACT_CHARS", "600"))
@@ -22,6 +30,7 @@ DEFAULT_MAX_SNIPPET_CHARS = int(os.getenv("SOURCES_MAX_SNIPPET_CHARS", "400"))
 
 
 def _format_article(article: Article, max_abstract: int) -> str:
+    """Formata um artigo como bloco de texto estruturado para o contexto."""
     lines = []
     title = article.title.strip() or "(sem título)"
     lines.append(f"- Título: {title}")
@@ -49,6 +58,7 @@ def _format_article(article: Article, max_abstract: int) -> str:
 
 
 def _format_patent(patent: Patent) -> str:
+    """Formata uma patente como bloco de texto estruturado para o contexto."""
     lines = []
     title = patent.title.strip() or "(sem título)"
     lines.append(f"- Título: {title}")

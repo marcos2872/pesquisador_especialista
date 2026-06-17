@@ -1,4 +1,13 @@
-"""Handler de requisições HTTP para a API de pesquisa."""
+"""
+Handler de requisições HTTP para a API de pesquisa.
+
+Usamos BaseHTTPRequestHandler (stdlib) em vez de um framework web para
+evitar dependências. O roteamento é feito manualmente no do_GET/do_POST/
+do_DELETE comparando self.path com as rotas esperadas.
+
+A aplicação também serve o frontend React estático (ui/dist/) e faz
+proteção contra path traversal no serviço de assets.
+"""
 
 import json
 from http import HTTPStatus
@@ -15,10 +24,20 @@ from server.services.research_service import generate_report
 
 
 class ResearchHandler(BaseHTTPRequestHandler):
-    """Handler para rotas da aplicação."""
+    """
+    Handler que mapeia requisições HTTP para as operações do sistema.
+
+    Rotas:
+      GET  /, /index.html        → frontend React (ui/dist/index.html)
+      GET  /assets/*             → arquivos estáticos do frontend
+      GET  /api/history          → lista pesquisas salvas
+      GET  /api/history/{id}     → detalhes de uma pesquisa
+      POST /api/research         → gera novo relatório
+      DELETE /api/history/{id}   → remove pesquisa do histórico
+    """
 
     def _write_json(self, payload: dict, status: int = HTTPStatus.OK) -> None:
-        """Envia resposta JSON."""
+        """Serializa o payload como JSON e envia a resposta HTTP."""
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -28,13 +47,11 @@ class ResearchHandler(BaseHTTPRequestHandler):
         try:
             self.wfile.write(body)
         except BrokenPipeError:
-            pass  # Cliente fechou a conexão, não é erro de aplicação
+            pass  # Cliente fechou a conexão antes de ler — não é erro nosso
         self.close_connection = True
 
     def _serve_index(self) -> None:
-        """Serve o arquivo index.html estático."""
-        from pathlib import Path
-
+        """Serve o arquivo index.html do frontend React."""
         static_dir = Path(__file__).parent.parent.parent / "ui" / "dist"
         index_path = static_dir / "index.html"
 
@@ -52,7 +69,13 @@ class ResearchHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def _resolve_asset_file(self, asset_path: str) -> Path | None:
-        """Retorna o arquivo solicitado dentro de ui/dist/assets."""
+        """
+        Resolve o caminho do asset dentro de ui/dist/assets/ com proteção
+        contra path traversal (ex.: /assets/../../../etc/passwd).
+
+        A verificação resolved_asset.relative_to(resolved_static_dir) garante
+        que o arquivo resolvido esteja DENTRO do diretório de assets.
+        """
         from urllib.parse import unquote
 
         static_dir = Path(__file__).parent.parent.parent / "ui" / "dist" / "assets"
@@ -73,11 +96,11 @@ class ResearchHandler(BaseHTTPRequestHandler):
         try:
             resolved_asset.relative_to(resolved_static_dir)
         except ValueError:
-            return None
+            return None  # Path traversal detectado
         return resolved_asset if resolved_asset.is_file() else None
 
     def _serve_asset(self, asset_path: str) -> None:
-        """Serve arquivos de assets do frontend estático."""
+        """Serve arquivos de assets do frontend estático com content-type adequado."""
         from mimetypes import guess_type
 
         resolved_asset = self._resolve_asset_file(asset_path)
@@ -101,9 +124,10 @@ class ResearchHandler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_GET(self) -> None:
-        """Processa requisições GET."""
+        """Roteia requisições GET: frontend, assets, ou API de histórico."""
         path = self.path.split("?", 1)[0]
 
+        # Frontend estático
         if path in ("/", "/index.html"):
             self._serve_index()
             return
@@ -113,6 +137,8 @@ class ResearchHandler(BaseHTTPRequestHandler):
         if path.startswith("/assets/"):
             self._serve_asset(path)
             return
+
+        # API: listar histórico
         if path == "/api/history":
             try:
                 researches = list_researches()
@@ -124,6 +150,8 @@ class ResearchHandler(BaseHTTPRequestHandler):
                 return
             self._write_json({"researches": researches})
             return
+
+        # API: detalhes de uma pesquisa
         if path.startswith("/api/history/"):
             try:
                 research_id = int(path.split("/api/history/")[1].strip("/"))
@@ -142,10 +170,20 @@ class ResearchHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(research)
             return
+
         self.send_error(HTTPStatus.NOT_FOUND, "Rota não encontrada.")
 
     def do_POST(self) -> None:
-        """Processa requisições POST para /api/research."""
+        """
+        Gera um novo relatório de pesquisa.
+
+        Fluxo:
+          1. Lê o JSON do corpo da requisição
+          2. Extrai o tópico
+          3. Chama generate_report (que orquestra busca de fontes + IA)
+          4. Retorna o relatório ao cliente
+          5. Tenta salvar no histórico (falha não quebra a resposta)
+        """
         if self.path != "/api/research":
             self.send_error(HTTPStatus.NOT_FOUND, "Rota não encontrada.")
             return
@@ -174,13 +212,15 @@ class ResearchHandler(BaseHTTPRequestHandler):
 
         self._write_json({"topic": topic, "report": report})
 
+        # Persistência do histórico é secundária — se falhar (ex.: permissão
+        # de disco), o relatório já foi entregue ao cliente.
         try:
             save_research(topic, report)
         except Exception:
-            pass  # History save failure should not break the response
+            pass
 
     def do_DELETE(self) -> None:
-        """Processa requisições DELETE para /api/history/{id}."""
+        """Remove uma pesquisa do histórico pelo ID."""
         path = self.path.split("?", 1)[0]
 
         if not path.startswith("/api/history/"):

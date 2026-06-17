@@ -1,8 +1,18 @@
-"""Serviço de banco de dados SQLite para histórico de pesquisas."""
+"""
+Serviço de banco de dados SQLite para histórico de pesquisas.
+
+Usamos SQLite diretamente (sem ORM) para manter zero dependências.
+O banco fica em ~/.pesquisador/history.db — um arquivo local por usuário.
+
+A connection factory _get_connection() garante que o diretório e a
+tabela existam antes de qualquer operação, eliminando a necessidade
+de um script de migração separado.
+"""
 
 import sqlite3
 from pathlib import Path
 
+# Banco localizado no home do usuário para persistência entre execuções
 DB_PATH = Path.home() / ".pesquisador" / "history.db"
 
 _CREATE_TABLE_SQL = """
@@ -16,7 +26,14 @@ CREATE TABLE IF NOT EXISTS researches (
 
 
 def _get_connection() -> sqlite3.Connection:
-    """Retorna conexão com o banco, criando diretório e tabela se necessário."""
+    """
+    Retorna conexão com o banco, criando diretório e tabela se necessário.
+
+    Usamos row_factory=sqlite3.Row para acessar colunas por nome (ex.:
+    row["topic"]) em vez de índice numérico, melhorando a legibilidade.
+    O bloco try/except no CREATE TABLE lida com race conditions em
+    ambientes concorrentes.
+    """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row

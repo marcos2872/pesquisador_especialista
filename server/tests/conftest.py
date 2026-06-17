@@ -1,13 +1,17 @@
-"""Fixtures e helpers compartilhados pelos testes."""
+"""
+Fixtures e helpers compartilhados pelos testes.
+
+PROJECT_ROOT é adicionado ao sys.path para que os imports absolutos
+(server.models, server.services, etc.) funcionem nos testes sem
+depender de instalação via pip.
+"""
 
 import sys
 from pathlib import Path
 
 import pytest
 
-PROJECT_ROOT = (
-    Path(__file__).resolve().parent.parent
-)  # goes from server/tests/ up to project root
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 

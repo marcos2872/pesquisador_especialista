@@ -1,4 +1,17 @@
-"""Serviço de IA - Integração com OpenAI/Azure."""
+"""
+Serviço de IA — Integração com OpenAI/Azure.
+
+Usamos urllib.request diretamente (sem SDK openai) para evitar
+dependências. A API de responses da OpenAI é chamada via HTTP POST
+com payload JSON.
+
+Suporta dois formatos de resposta:
+  1. /responses (formato novo, com output_text ou output list)
+  2. /chat/completions (fallback via choices[0].message.content)
+
+Azure OpenAI é detectado automaticamente pela presença de
+".openai.azure.com" na base_url.
+"""
 
 import json
 import os
@@ -9,11 +22,22 @@ from server.config import build_retry_prompt, build_user_prompt, load_prompt_tem
 
 
 def extract_openai_text(data: dict) -> str:
-    """Extrai texto de diferentes formatos de payload da OpenAI."""
+    """
+    Extrai texto de diferentes formatos de payload da OpenAI.
+
+    A OpenAI tem múltiplos formatos de resposta dependendo do endpoint:
+    - /responses: output_text (string) ou output (lista de blocos)
+    - /chat/completions: choices[0].message.content
+
+    Esta função tenta cada formato em ordem e retorna o primeiro texto
+    não vazio encontrado.
+    """
+    # Formato /responses com output_text direto
     output_text = data.get("output_text")
     if isinstance(output_text, str) and output_text.strip():
         return output_text.strip()
 
+    # Formato /responses com output como lista de blocos
     output = data.get("output")
     if isinstance(output, list):
         chunks = []
@@ -35,7 +59,7 @@ def extract_openai_text(data: dict) -> str:
         if chunks:
             return "\n\n".join(chunks)
 
-    # Fallback para chat completions
+    # Fallback para chat completions (endpoint /chat/completions)
     choices = data.get("choices")
     if isinstance(choices, list) and choices:
         message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
@@ -61,7 +85,22 @@ def call_openai(
     retry: bool = False,
     prompt_template: str = "",
 ) -> str:
-    """Faz chamada à API OpenAI/Azure e retorna o texto gerado."""
+    """
+    Faz chamada à API OpenAI/Azure e retorna o texto gerado.
+
+    Args:
+        topic: Tópico da pesquisa
+        sources_context: Contexto de fontes reais (opcional)
+        retry: Se True, usa o prompt mais rigoroso para segunda tentativa
+        prompt_template: Template de system prompt (opcional)
+
+    Returns:
+        Texto do relatório gerado pela IA
+
+    Raises:
+        RuntimeError: Se API key não configurada, modelo não encontrado,
+                      ou resposta sem texto utilizável
+    """
     api_key = os.getenv("OPENAI_API_KEY")
     model = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
     base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
@@ -69,13 +108,11 @@ def call_openai(
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY não configurada.")
 
-    # Usa os builders do config
     if retry:
         user_content = build_retry_prompt(topic)
     else:
         user_content = build_user_prompt(topic, sources_context)
 
-    # Usa o template do config
     if not prompt_template:
         prompt_template = load_prompt_template()
 
@@ -87,6 +124,7 @@ def call_openai(
         ],
     }
 
+    # Azure usa api-key no header; OpenAI padrão usa Bearer token
     is_azure = ".openai.azure.com" in base_url
     headers = {"Content-Type": "application/json"}
     if is_azure:

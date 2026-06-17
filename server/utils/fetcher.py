@@ -1,7 +1,19 @@
 #!/usr/bin/env python3
 """
-Módulo responsável por baixar e extrair texto de URLs (HTML e PDF),
-validar relevância e extrair trechos literais (snippets) para citações.
+Módulo de fetch e extração de conteúdo de URLs.
+
+Responsabilidades:
+  1. Baixar HTML e PDF de URLs
+  2. Extrair texto limpo (removendo scripts, styles, tags)
+  3. Validar relevância de URLs contra um tópico (via Crossref ou
+     análise de conteúdo)
+  4. Extrair trechos literais (snippets) ao redor de keywords para
+     citações com aspas no relatório
+  5. Gerar variantes de query (PT→EN, com conectores)
+
+Usamos urllib padrão (sem requests) para evitar dependências.
+Para PDFs, tentamos usar PyMuPDF (fitz) se disponível; caso contrário,
+fazemos fallback para extração de texto bruto.
 """
 
 import json
@@ -16,7 +28,7 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger("pesquisador.fetcher")
 
-# Palavras comuns em inglês/português que não ajudam na relevância
+# Stopwords en/pt — palavras comuns que não agregam relevância
 _STOPWORDS = {
     "a",
     "an",
@@ -80,6 +92,7 @@ USER_AGENT = "Mozilla/5.0 (compatible; PesquisadorEspecialista/1.0)"
 
 
 def _make_request(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[int, bytes]:
+    """Faz requisição HTTP GET e retorna (status_code, body)."""
     headers = {"User-Agent": USER_AGENT}
     req = Request(url, headers=headers, method="GET")
     try:
@@ -92,23 +105,29 @@ def _make_request(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[int, bytes]
 
 
 def _extract_text_from_html(html: bytes) -> str:
+    """Remove tags HTML/script/style e retorna texto limpo."""
     try:
         text = html.decode("utf-8", errors="ignore")
     except Exception:
         return ""
+    # Remove scripts e styles primeiro (conteúdo entre tags)
     text = re.sub(
         r"<script[^>]*>.*?</script>", "", text, flags=re.IGNORECASE | re.DOTALL
     )
     text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    # Remove tags HTML restantes
     text = re.sub(r"<[^>]+>", " ", text)
+    # Normaliza espaços em branco
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
 def _extract_text_from_pdf(data: bytes) -> str:
+    """Extrai texto de PDF usando PyMuPDF (fitz) se disponível."""
     try:
         import fitz
     except ImportError:
+        # Fallback: decodifica como texto bruto (pouca qualidade)
         return data.decode("utf-8", errors="ignore")
     try:
         doc = fitz.open("pdf", data)
@@ -121,6 +140,12 @@ def _extract_text_from_pdf(data: bytes) -> str:
 
 
 def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[bool, str, str]:
+    """
+    Baixa o conteúdo de uma URL (HTML ou PDF) e retorna o texto extraído.
+
+    Returns:
+        (sucesso, texto, mensagem_de_erro)
+    """
     status, content = _make_request(url, timeout=timeout)
     if status == 0:
         return False, "", "Falha de conexão (timeout ou DNS)"
@@ -137,6 +162,7 @@ def fetch_url(url: str, timeout: int = DEFAULT_TIMEOUT) -> tuple[bool, str, str]
 
 
 def _extract_keywords(topic: str) -> set[str]:
+    """Extrai palavras-chave relevantes do tópico (remove stopwords e tokens curtos)."""
     cleaned = re.sub(r"[^\w\s/\-]", " ", topic.lower())
     tokens = re.split(r"[\s/]+", cleaned)
     keywords = {
@@ -150,6 +176,12 @@ def _extract_keywords(topic: str) -> set[str]:
 def _content_matches_topic(
     text: str, topic_keywords: set[str], min_matches: int = 2
 ) -> bool:
+    """
+    Verifica se o texto contém keywords do tópico.
+
+    Usamos um mínimo de matches proporcional ao número de keywords
+    para evitar falsos positivos com textos muito curtos.
+    """
     if not text or not topic_keywords:
         return False
     text_lower = text.lower()
@@ -158,9 +190,11 @@ def _content_matches_topic(
 
 
 def _extract_doi(url: str) -> Optional[str]:
+    """Extrai DOI de uma URL ou string, se presente."""
     lower = url.lower()
     if "doi.org/" in lower:
         return url.split("doi.org/", 1)[1].split("?", 1)[0].strip("/")
+    # Tenta encontrar padrão DOI (10.xxxx/xxxxx) diretamente no texto
     match = re.search(r"10\.\d{4,}/[^\s\)\"']+", url)
     return match.group(0) if match else None
 
@@ -168,6 +202,14 @@ def _extract_doi(url: str) -> Optional[str]:
 def _validate_doi_via_crossref(
     doi: str, topic_keywords: set[str], timeout: int
 ) -> tuple[bool, str]:
+    """
+    Valida um DOI consultando a API da Crossref.
+
+    Verifica:
+      1. Se o DOI existe na Crossref
+      2. Se o título/abstract do trabalho contém keywords do tópico
+         (relevância temática)
+    """
     api_url = f"https://api.crossref.org/works/{doi}"
     headers = {"User-Agent": _CROSSREF_USER_AGENT, "Accept": "application/json"}
     req = Request(api_url, headers=headers, method="GET")
@@ -194,6 +236,16 @@ def _validate_doi_via_crossref(
 def validate_url_relevance(
     url: str, topic: str, timeout: int = DEFAULT_TIMEOUT
 ) -> tuple[bool, str]:
+    """
+    Valida se uma URL é acessível e relevante ao tópico.
+
+    Estratégia:
+      1. Se a URL contém DOI → valida via Crossref (rápido e confiável)
+      2. Senão → baixa o conteúdo e verifica se contém keywords do tópico
+
+    Returns:
+        (é_válida, motivo_da_rejeição)
+    """
     parsed = urlparse(url)
     if not parsed.scheme or not parsed.netloc:
         return False, "URL malformada"
@@ -201,6 +253,7 @@ def validate_url_relevance(
     doi = _extract_doi(url)
     if doi:
         return _validate_doi_via_crossref(doi, topic_keywords, timeout)
+    # Para URLs não-DOI, baixa e analisa o conteúdo
     status, content = _make_request(url, timeout=timeout)
     if status == 0:
         return False, "Falha de conexão (timeout ou DNS)"
@@ -230,6 +283,15 @@ def _extract_snippets_around_keywords(
     max_snippets: int = _MAX_SNIPPETS_PER_SOURCE,
     context_window: int = _CONTEXT_WINDOW,
 ) -> list[str]:
+    """
+    Extrai trechos literais ao redor de keywords no texto.
+
+    Cada snippet contém a keyword com ~80 caracteres de contexto de cada
+    lado. Os snippets são usados para citações literais no relatório,
+    permitindo que o modelo cite trechos exatos com aspas.
+
+    Evita snippets duplicados controlando spans já vistos.
+    """
     if not text or not keywords:
         return []
     text_lower = text.lower()
@@ -247,6 +309,7 @@ def _extract_snippets_around_keywords(
             if span not in seen_spans:
                 seen_spans.add(span)
                 snippet = text[snippet_start:snippet_end].strip()
+                # Adiciona marcadores de truncamento
                 if snippet_start > 0:
                     snippet = "…" + snippet
                 if snippet_end < len(text):
@@ -269,6 +332,17 @@ def _deduplicate_snippets(snippets: list[str]) -> list[str]:
 
 
 def _build_expanded_queries(topic: str) -> list[str]:
+    """
+    Gera múltiplas variantes de query a partir do tópico.
+
+    Inclui:
+      - Query original em PT
+      - Tradução para EN (via dicionário de termos técnicos)
+      - Combinações com conectores ("review", "recent advances", etc.)
+
+    O dicionário de tradução cobre termos comuns de materiais, engenharia
+    e ciência para melhorar a cobertura em APIs internacionais.
+    """
     translations = {
         "ligas": "alloys",
         "alumínio": "aluminum",
@@ -372,6 +446,7 @@ def _build_expanded_queries(topic: str) -> list[str]:
         "characterization",
     ):
         queries.append(f"{english_topic} {connector}")
+    # Remove duplicatas mantendo ordem
     seen: set[str] = set()
     unique: list[str] = []
     for q in queries:

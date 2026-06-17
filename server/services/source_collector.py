@@ -1,4 +1,15 @@
-"""Serviço de coleta de fontes reais via APIs acadêmicas."""
+"""
+Serviço de coleta de fontes reais via APIs acadêmicas gratuitas.
+
+Este módulo consulta múltiplas APIs (Crossref, OpenAlex, arXiv, USPTO,
+Espacenet, etc.) para obter artigos e patentes reais sobre o tópico.
+
+O resultado é um contexto estruturado injetado no prompt da IA, contendo
+títulos, autores, DOIs, URLs e trechos literais extraídos dos PDFs.
+
+A coleta usa ThreadPoolExecutor para rodar buscas de artigos e patentes
+em paralelo, respeitando delays entre queries para evitar rate limits.
+"""
 
 import logging
 import os
@@ -6,8 +17,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-# Importa os módulos de busca (assumindo que existem em utils.search)
-# Se não existirem, esta função retornará empty context
+# Importa os módulos de busca. Se não existirem (ex.: durante testes ou
+# instalação parcial), retorna contexto vazio em vez de quebrar.
 try:
     from server.utils.fetcher import download_source_texts, generate_query_variants
     from server.utils.search.academic import search_articles
@@ -30,9 +41,16 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
     """
     Coleta fontes reais via APIs gratuitas, baixa textos e extrai snippets.
 
+    Fluxo:
+      1. Gera variantes de query (PT, EN, com conectores como "review")
+      2. Busca artigos e patentes em paralelo para até 5 queries
+      3. Baixa PDFs e extrai trechos literais (snippets) ao redor de keywords
+      4. Formata contexto estruturado para o prompt da IA
+
     Returns:
         (sources_context, snippets_map): contexto formatado e mapa url->snippets.
     """
+    # Permite desligar a busca real para testes rápidos (ENABLE_REAL_SEARCH=0)
     if os.getenv("ENABLE_REAL_SEARCH", "1") == "0":
         return "", {}
 
@@ -51,10 +69,12 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
     all_articles: list = []
     all_patents: list = []
 
+    # Delay entre queries para evitar rate limits das APIs gratuitas
     query_delay = float(os.getenv("SEARCH_QUERY_DELAY_SECONDS", "1.0"))
     for i, query in enumerate(queries[:5]):  # Usa até 5 queries para melhor cobertura
         if i > 0 and query_delay > 0:
-            time.sleep(query_delay)  # Delay entre queries para evitar rate limits
+            time.sleep(query_delay)
+        # Busca artigos e patentes em paralelo para cada query
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_art = executor.submit(
                 search_articles, query, max_results=5, timeout=15
@@ -77,7 +97,7 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
         logger.info("Nenhuma fonte real encontrada para o tópico '%s'", topic)
         return "", {}
 
-    # Baixa PDFs e extrai snippets das fontes encontradas
+    # Prepara lista para download de PDFs e extração de snippets
     sources_for_download: list[dict] = []
     for a in all_articles:
         entry = {

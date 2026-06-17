@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Servidor HTTP simples para a plataforma de pesquisa com IA."""
+"""
+Ponto de entrada do servidor HTTP.
+
+Usamos http.server.ThreadigHTTPServer (stdlib) em vez de Flask/FastAPI
+para manter zero dependências de framework web. Cada requisição roda em
+uma thread separada, o que é suficiente para uma API de uso interno com
+baixa concorrência.
+
+O .env é carregado antes de qualquer outro import para que as variáveis
+de ambiente (OPENAI_API_KEY, etc.) estejam disponíveis desde o início.
+"""
 
 import os
 import sys
@@ -18,7 +28,7 @@ from .handlers.research_handler import ResearchHandler
 
 
 def main() -> None:
-    """Inicializa o servidor HTTP."""
+    """Inicializa o servidor HTTP na porta/config especificada."""
     server = ThreadingHTTPServer((HOST, PORT), ResearchHandler)
     print(f"Servidor ativo em http://{HOST}:{PORT}")
     server.serve_forever()

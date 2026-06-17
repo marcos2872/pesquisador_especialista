@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Busca de patentes no WIPO Patentscope via API.
-Requer cadastro em https://patentscope.wipo.int/ para obter a chave de API.
+Busca de patentes no WIPO Patentscope via API REST.
+
+Requer cadastro gratuito em https://patentscope.wipo.int/ para obter
+a chave WIPO_API_KEY. Se a chave não estiver configurada, retorna
+lista vazia silenciosamente — o sistema continua com outros provedores
+de patente (EPO, USPTO, Google Patents, etc.).
 """
 
 import os

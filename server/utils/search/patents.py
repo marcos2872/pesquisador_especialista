@@ -38,6 +38,12 @@ _PATENTSVIEW_BASE = "https://api.patentsview.org/patents/query"
 
 
 def _get_epo_ops_token(timeout: int) -> Optional[str]:
+    """
+    Obtém token de acesso para a API Espacenet OPS (EPO).
+
+    Usa client credentials OAuth2 com as credenciais EPO_OPS_CONSUMER_KEY
+    e EPO_OPS_CONSUMER_SECRET.
+    """
     consumer_key = os.getenv("EPO_OPS_CONSUMER_KEY")
     consumer_secret = os.getenv("EPO_OPS_CONSUMER_SECRET")
     if not consumer_key or not consumer_secret:
@@ -63,6 +69,12 @@ def _get_epo_ops_token(timeout: int) -> Optional[str]:
 
 
 def _search_epo_ops(topic: str, max_results: int, timeout: int) -> list[Patent]:
+    """
+    Busca patentes na API Espacenet OPS (EPO).
+
+    Requer EPO_OPS_CONSUMER_KEY e EPO_OPS_CONSUMER_SECRET.
+    Usa busca textual no título e abstract.
+    """
     token = _get_epo_ops_token(timeout)
     if not token:
         return []
@@ -112,6 +124,7 @@ def _search_epo_ops(topic: str, max_results: int, timeout: int) -> list[Patent]:
 
 
 def _search_uspto(topic: str, max_results: int, timeout: int) -> list[Patent]:
+    """Busca patentes na API USPTO Open Data. Requer USPTO_API_KEY."""
     api_key = os.getenv("USPTO_API_KEY")
     if not api_key:
         return []
@@ -180,6 +193,7 @@ def _search_uspto(topic: str, max_results: int, timeout: int) -> list[Patent]:
 
 
 def _search_lens(topic: str, max_results: int, timeout: int) -> list[Patent]:
+    """Busca patentes na API Lens.org. Requer LENS_API_TOKEN."""
     token = os.getenv("LENS_API_TOKEN")
     if not token:
         return []
@@ -238,7 +252,12 @@ def _search_lens(topic: str, max_results: int, timeout: int) -> list[Patent]:
 
 
 def _search_patentsview(topic: str, max_results: int, timeout: int) -> list[Patent]:
-    """PatentsView legado (descontinuado em 2024 com WAF, mantido como fallback)."""
+    """
+    PatentsView (gratuito, sem cadastro).
+
+    ATENÇÃO: API descontinuada em 2024 com WAF (Web Application Firewall).
+    Mantido como fallback histórico — pode não funcionar consistentemente.
+    """
     query_payload = {
         "q": {"_and": [{"_text_all": {"patent_title": topic}}]},
         "f": [
@@ -302,6 +321,13 @@ def _search_patentsview(topic: str, max_results: int, timeout: int) -> list[Pate
 
 
 def _dedup_patents(patents: list[Patent]) -> list[Patent]:
+    """
+    Remove patentes duplicadas por número ou título normalizado.
+
+    Preserva a primeira ocorrência. Ignora títulos placeholders
+    ("(sem título)", "(título a confirmar)") para não bloquear
+    registros com título pendente.
+    """
     seen_numbers: set[str] = set()
     seen_titles: set[str] = set()
     result: list[Patent] = []
@@ -326,16 +352,18 @@ def search_patents(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[Patent]:
     """
-    Busca patentes reais para o topico combinando varias APIs gratuitas em paralelo.
-    Retorna ate max_results patentes validas.
+    Busca patentes reais para o tópico combinando APIs gratuitas em paralelo.
 
-    Providers ativos:
-      1. Espacenet OPS (gratis com EPO_OPS_CONSUMER_KEY/SECRET)
-      2. USPTO (gratis com USPTO_API_KEY)
-      3. Lens.org (gratis com LENS_API_TOKEN)
-      4. WIPO Patentscope (gratis com WIPO_API_KEY)
-      5. Google Patents via SerpAPI (gratis com chave opcional SERPAPI_API_KEY)
-      6. PatentsView (gratis, sem cadastro; atualmente descontinuado)
+    Providers ativos (todos gratuitos, alguns com chave opcional):
+      1. Espacenet OPS (EPO_OPS_CONSUMER_KEY/SECRET)
+      2. USPTO (USPTO_API_KEY)
+      3. Lens.org (LENS_API_TOKEN)
+      4. WIPO Patentscope (WIPO_API_KEY)
+      5. Google Patents via SerpAPI (SERPAPI_API_KEY)
+      6. PatentsView (sem cadastro, atualmente descontinuado)
+
+    Se houver SERPAPI_API_KEY, as patentes são enriquecidas com detalhes
+    (classificação CPC, número de reivindicações, forward references).
     """
     from .serpapi_patents import search_google_patents as _search_google_patents
     from .wipo import search_wipo as _search_wipo_provider

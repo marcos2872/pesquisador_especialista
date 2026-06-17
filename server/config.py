@@ -1,16 +1,27 @@
-"""Configurações da aplicação carregadas do ambiente."""
+"""
+Configurações da aplicação carregadas do ambiente.
+
+Centralizamos todas as variáveis de ambiente aqui em vez de espalhá-las
+pelos módulos. Isso facilita encontrar, documentar e testar cada config.
+
+Usamos dotenv para carregar .env automaticamente (feito em app.py antes
+de qualquer outro import).
+"""
 
 import os
 from pathlib import Path
 
-# Diretórios base
-BASE_DIR = Path(
-    __file__
-).parent.parent.resolve()  # project root (one level up from server/)
-STATIC_DIR = BASE_DIR / "ui" / "dist"  # production builds
-AGENT_DIR = Path(__file__).parent.resolve() / "prompts"  # server/prompts/
+# ── Diretórios base do projeto ──────────────────────────────────────────
+# BASE_DIR é a raiz do projeto (um nível acima de server/).
+# STATIC_DIR aponta para ui/dist/ — o build de produção do frontend React.
+# AGENT_DIR contém os templates de prompt (systemprompt.md, userprompt.md).
+BASE_DIR = Path(__file__).parent.parent.resolve()
+STATIC_DIR = BASE_DIR / "ui" / "dist"
+AGENT_DIR = Path(__file__).parent.resolve() / "prompts"
 
-# Prompts
+# ── Caminhos dos prompts ────────────────────────────────────────────────
+# Mantemos os prompts em arquivos .md separados para edição independente
+# do código Python. Se os arquivos não existirem, usamos fallback hardcoded.
 PROMPT_TEMPLATE_PATH = AGENT_DIR / "systemprompt.md"
 USER_PROMPT_PATH = AGENT_DIR / "userprompt.md"
 
@@ -33,7 +44,13 @@ def load_user_prompt_template() -> str:
 
 
 def build_user_prompt(topic: str, sources_context: str = "") -> str:
-    """Constrói o prompt do usuário com o tópico e contexto de fontes."""
+    """
+    Constrói o prompt final do usuário.
+
+    Se houver fontes reais coletadas, injeta o contexto estruturado entre
+    marcadores --- para que o modelo entenda que deve usar SOMENTE aquelas
+    fontes e não inventar referências.
+    """
     base = load_user_prompt_template().replace("{topic}", topic)
     if sources_context:
         return (
@@ -45,7 +62,13 @@ def build_user_prompt(topic: str, sources_context: str = "") -> str:
 
 
 def build_retry_prompt(topic: str) -> str:
-    """Constrói o prompt de retry quando a validação de fontes falha."""
+    """
+    Constrói o prompt para a segunda tentativa (retry).
+
+    Quando a validação de fontes falha na primeira tentativa (links
+    inválidos ou irrelevantes), enviamos instruções mais rígidas para
+    que o modelo seja mais conservador ao citar fontes.
+    """
     return (
         f"Tema da pesquisa: {topic}\n\n"
         "A tentativa anterior falhou porque os links fornecidos não puderam ser "
@@ -63,15 +86,24 @@ def build_retry_prompt(topic: str) -> str:
     )
 
 
-# Configurações de servidor
+# ── Servidor HTTP ──────────────────────────────────────────────────────
+# HOST e PORT definem onde o ThreadingHTTPServer escuta. Em produção,
+# use 0.0.0.0:8000; em desenvolvimento local, 127.0.0.1:8000.
 HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", "8000"))
 
-# Configurações OpenAI
+# ── OpenAI / Azure OpenAI ───────────────────────────────────────────────
+# OPENAI_BASE_URL pode apontar para Azure OpenAI (ex.: https://meu-recurso.openai.azure.com)
+# ou para qualquer endpoint compatível com a API da OpenAI.
+# OPENAI_MODEL: nome do deployment no Azure ou model ID na OpenAI.
+# OPENAI_DEBUG=1 exibe o payload bruto retornado em caso de erro.
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
-OPENAI_DEBUG = os.getenv("OPENAI_DEBUG", "0") == "1"
+OPENAI_DEBUG = os.getenv("OPENAI_DEBUG", "1") == "1"
 OPENAI_TIMEOUT_SECONDS = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "240"))
 
-# Configurações de busca
+# ── Busca de fontes reais ──────────────────────────────────────────────
+# Quando ENABLE_REAL_SEARCH=0, o sistema pula a coleta de fontes via APIs
+# (Crossref, arXiv, etc.) e manda o tópico diretamente para a IA. Útil
+# para testes rápidos ou quando não há acesso à internet.
 ENABLE_REAL_SEARCH = os.getenv("ENABLE_REAL_SEARCH", "1") == "1"

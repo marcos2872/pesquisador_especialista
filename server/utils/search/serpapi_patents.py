@@ -40,7 +40,12 @@ def _build_url(engine: str, query: str, num: int) -> str:
 
 
 def _build_details_url(patent_id: str) -> str:
-    """Constroi URL de detalhes de patente no SerpAPI (engine=google_patents_details)."""
+    """
+    Constroi URL de detalhes de patente no SerpAPI.
+
+    Usa engine=google_patents_details para obter informações completas
+    (classificação CPC, claims, forward references) de uma patente específica.
+    """
     api_key = os.getenv("SERPAPI_API_KEY", "")
     params = {
         "engine": "google_patents_details",

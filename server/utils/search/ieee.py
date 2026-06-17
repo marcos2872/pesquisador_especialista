@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Busca de artigos no IEEE Xplore via API oficial.
-Requer cadastro gratuito em https://developer.ieee.org/ para obter a chave.
+
+Requer cadastro gratuito em https://developer.ieee.org/ para obter a chave
+IEEE_API_KEY. Se a chave não estiver configurada, retorna lista vazia
+silenciosamente — útil para ambientes de desenvolvimento sem a chave.
 """
 
 import os
@@ -22,8 +25,10 @@ def search_ieee(
     timeout: int = DEFAULT_TIMEOUT,
 ) -> list[Article]:
     """
-    Busca artigos no IEEE Xplore. Requer a variavel de ambiente IEEE_API_KEY.
-    Se a chave nao estiver configurada, retorna lista vazia sem erro.
+    Busca artigos no IEEE Xplore via API oficial.
+
+    Requer IEEE_API_KEY no ambiente. Se a chave não estiver configurada,
+    retorna lista vazia sem erro — o sistema continua com outros providers.
     """
     api_key = os.getenv("IEEE_API_KEY")
     if not api_key:
@@ -50,6 +55,7 @@ def search_ieee(
         doi = item.get("doi")
         url = f"https://doi.org/{doi}" if doi else None
         if not url:
+            # Fallback: usa o número do artigo para montar URL
             article_number = item.get("article_number")
             if article_number:
                 url = f"https://ieeexplore.ieee.org/document/{article_number}"
