@@ -5,7 +5,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
-from server.services.db import get_research, list_researches, save_research
+from server.services.db import (
+    delete_research,
+    get_research,
+    list_researches,
+    save_research,
+)
 from server.services.research_service import generate_report
 
 
@@ -173,3 +178,30 @@ class ResearchHandler(BaseHTTPRequestHandler):
             save_research(topic, report)
         except Exception:
             pass  # History save failure should not break the response
+
+    def do_DELETE(self) -> None:
+        """Processa requisições DELETE para /api/history/{id}."""
+        path = self.path.split("?", 1)[0]
+
+        if not path.startswith("/api/history/"):
+            self.send_error(HTTPStatus.NOT_FOUND, "Rota não encontrada.")
+            return
+
+        try:
+            research_id = int(path.split("/api/history/")[1].strip("/"))
+        except (ValueError, IndexError):
+            self._write_json(
+                {"error": "Id inválido."},
+                status=HTTPStatus.BAD_REQUEST,
+            )
+            return
+
+        deleted = delete_research(research_id)
+        if not deleted:
+            self._write_json(
+                {"error": "Pesquisa não encontrada."},
+                status=HTTPStatus.NOT_FOUND,
+            )
+            return
+
+        self._write_json({"deleted": True})

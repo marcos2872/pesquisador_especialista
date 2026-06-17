@@ -221,3 +221,30 @@ def test_sanitize_report_links_removes_no_validation_markers():
     ):
         sanitized, _ = sanitize_report_links(report, "test")
     assert "[sem validação externa]" not in sanitized
+
+
+def test_sanitize_report_links_pre_approves_collected_urls():
+    """URLs coletadas na busca real são pré-aprovadas, sem validação."""
+    report = "Texto com [Fonte](https://arxiv.org/abs/1234)."
+    sanitized, removed = sanitize_report_links(
+        report, "grafeno",
+        collected_urls={"https://arxiv.org/abs/1234"},
+    )
+    assert "fonte não verificada" not in sanitized
+    assert len(removed) == 0
+
+
+def test_sanitize_report_links_skips_validation_for_collected_urls():
+    """URLs coletadas não passam por validate_url_relevance (evita timeout/falso 404)."""
+    with patch(
+        "server.services.report_service.validate_url_relevance",
+        return_value=(False, "timeout"),
+    ) as mock:
+        report = "Texto com [Fonte](https://arxiv.org/abs/1234)."
+        sanitized, removed = sanitize_report_links(
+            report, "grafeno",
+            collected_urls={"https://arxiv.org/abs/1234"},
+        )
+    mock.assert_not_called()
+    assert "fonte não verificada" not in sanitized
+    assert len(removed) == 0

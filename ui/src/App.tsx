@@ -70,11 +70,11 @@ export default function App() {
   }
 
   useEffect(() => {
-    loadHistory();
+    const timer = setTimeout(() => {
+      loadHistory();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
-  useEffect(() => {
-    if (!isRunning && report) loadHistory();
-  }, [isRunning]);
 
   async function runResearch() {
     const topicValue = topic.trim();
@@ -97,11 +97,27 @@ export default function App() {
       const markdown = data.report || "Sem conteúdo retornado.";
       setReport(markdown);
       setStatus({ text: "Pesquisa concluída.", type: "success" });
-    } catch (error: any) {
+    } catch (error: unknown) {
       setReport("");
-      setStatus({ text: `Erro: ${error.message}`, type: "error" });
+      const message = error instanceof Error ? error.message : String(error);
+      setStatus({ text: `Erro: ${message}`, type: "error" });
     } finally {
       setIsRunning(false);
+        loadHistory();
+    }
+  }
+
+  async function deleteHistoryItem(id: number) {
+    try {
+      const resp = await fetch(`/api/history/${id}`, { method: "DELETE" });
+      if (!resp.ok) return;
+      if (report && historyItems.some((item) => item.id === id)) {
+        // If the deleted item was currently being viewed, clear the report
+        setReport("");
+      }
+      loadHistory();
+    } catch {
+      /* silently ignore */
     }
   }
 
@@ -148,9 +164,17 @@ export default function App() {
 
         <AppNavbar
           active={sidebarActive}
-          onNavigate={setSidebarActive}
+          onNavigate={(id) => {
+            setSidebarActive(id);
+            if (id === 'nova-pesquisa') {
+              setTopic('');
+              setReport('');
+              setStatus({ text: 'Pronto.', type: 'neutral' });
+            }
+          }}
           historyItems={historyItems}
           onSelectHistory={loadResearchFromHistory}
+          onDeleteHistory={deleteHistoryItem}
         />
 
         <AppShell.Main style={{ background: "#121212" }}>
@@ -252,12 +276,7 @@ export default function App() {
                     </Button>
                   </Group>
                   {hasReport ? (
-                    <Card.Section
-                      style={{
-                        background: "#2e2e2e",
-                        border: "1px solid #333333",
-                      }}
-                    >
+                    <Card.Section>
                       <div id="report-output">
                         <MarkdownRenderer
                           content={normalizeCitationLinks(report)}

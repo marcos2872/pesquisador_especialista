@@ -46,9 +46,11 @@ def generate_report(
             if url.startswith("http"):
                 collected_urls.add(url)
         if line.strip().startswith("DOI:"):
-            doi = line.split(":", 1)[1].strip()
-            if doi:
-                collected_urls.add(f"https://doi.org/{doi}")
+            doi_value = line.split(":", 1)[1].strip()
+            if doi_value.startswith("http"):
+                collected_urls.add(doi_value)
+            elif doi_value:
+                collected_urls.add(f"https://doi.org/{doi_value}")
 
     def _try_generate(retry: bool = False) -> tuple[str, list[str], list[str]]:
         report = ai_service(

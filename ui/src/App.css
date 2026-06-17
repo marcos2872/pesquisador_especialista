@@ -29,7 +29,11 @@ body {
 }
 
 #report-output {
-    padding: 16px;
+    background: #ffffff;
+    color: #1a1a1a;
+    padding: 40px 48px;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
 }
 
 #report-output h2 {
@@ -38,7 +42,8 @@ body {
     margin-top: 24px;
     margin-bottom: 12px;
     padding-bottom: 4px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid #ddd;
+    color: #1a1a1a;
 }
 
 #report-output table {
@@ -49,12 +54,12 @@ body {
     border-collapse: collapse;
     font-size: 13px;
     margin: 12px 0;
-    border: 1px solid #333;
+    border: 1px solid #ddd;
     border-radius: 4px;
 }
 
 #report-output table thead {
-    background: #1a1a1a;
+    background: #f5f5f5;
 }
 
 #report-output table th {
@@ -63,16 +68,18 @@ body {
     font-size: 11px;
     letter-spacing: 0.03em;
     padding: 10px 14px;
-    border: 1px solid #333;
+    border: 1px solid #ddd;
     text-align: left;
     white-space: nowrap;
+    color: #1a1a1a;
 }
 
 #report-output table td {
     padding: 10px 14px;
-    border: 1px solid #333;
+    border: 1px solid #ddd;
     vertical-align: top;
     line-height: 1.5;
+    color: #1a1a1a;
 }
 
 #report-output table a {
@@ -84,8 +91,9 @@ body {
     margin: 12px 0;
     padding: 8px 12px;
     border-left: 3px solid #d72042;
-    background: rgba(215, 32, 66, 0.05);
+    background: #fef2f4;
     border-radius: 0 4px 4px 0;
+    color: #1a1a1a;
 }
 
 #report-output a {
@@ -101,4 +109,6 @@ body {
     font-size: 0.85em;
     padding: 2px 4px;
     border-radius: 3px;
+    background: #f5f5f5;
+    color: #1a1a1a;
 }

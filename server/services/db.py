@@ -106,3 +106,24 @@ def get_research(research_id: int) -> dict | None:
         }
     finally:
         conn.close()
+
+
+def delete_research(research_id: int) -> bool:
+    """
+    Deleta uma pesquisa pelo id.
+
+    Args:
+        research_id: Id da pesquisa a ser removida
+
+    Returns:
+        True se um registro foi removido, False se o id não existia
+    """
+    conn = _get_connection()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM researches WHERE id = ?", (research_id,)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
