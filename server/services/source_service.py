@@ -132,3 +132,118 @@ def count_unique_sources(report: str) -> int:
         re.findall(r"\[fonte não verificada\]", report, re.IGNORECASE)
     )
     return len(unique_urls) + unverified_count
+
+
+REQUIRED_SECTION_HEADINGS = [
+    "## 1. Estado da arte",
+    "## 2. Pesquisa de anterioridade",
+    "## 3. Tabela comparativa",
+    "## 4. Lacunas e oportunidades",
+    "## 5. Conclusão",
+    "## 6. Referências",
+]
+
+
+def validate_report_sections(report: str) -> None:
+    """
+    Verifica se o relatório contém todas as 6 seções obrigatórias.
+
+    As seções esperadas são definidas em REQUIRED_SECTION_HEADINGS:
+      1. Estado da arte
+      2. Pesquisa de anterioridade
+      3. Tabela comparativa
+      4. Lacunas e oportunidades
+      5. Conclusão
+      6. Referências
+
+    Lança RuntimeError se alguma seção estiver ausente.
+    """
+    missing = [s for s in REQUIRED_SECTION_HEADINGS if s not in report]
+    if missing:
+        raise RuntimeError(
+            "Relatório não contém as seções obrigatórias: "
+            + ", ".join(missing)
+        )
+
+
+def count_sources_per_section(report: str) -> dict[str, int]:
+    """
+    Conta quantas fontes (links) existem em cada seção do relatório.
+
+    Divide o relatório pelos headings ## N. e extrai os links Markdown
+    de cada bloco usando MARKDOWN_LINK_PATTERN.
+
+    Returns:
+        dict com heading como chave e contagem de links como valor.
+    """
+    sections = re.split(r'\n(?=## \d+\.)', report)
+    counts: dict[str, int] = {}
+    for section in sections:
+        header_match = re.match(r'## (\d+\..+)', section.strip())
+        if not header_match:
+            continue
+        header = header_match.group(1).strip()
+        urls = MARKDOWN_LINK_PATTERN.findall(section)
+        counts[header] = len(urls)
+    return counts
+
+
+def validate_section_min_sources(report: str, min_per_section: int = 1) -> None:
+    """
+    Verifica se cada seção técnica tem pelo menos min_per_section fontes.
+
+    Seção "Referências" não entra na validação, pois links ali são opcionais.
+
+    Lança RuntimeError se 2 ou mais seções técnicas estiverem abaixo do mínimo.
+    """
+    counts = count_sources_per_section(report)
+    empty_sections = [
+        header
+        for header, count in counts.items()
+        if count < min_per_section and "Referências" not in header
+    ]
+    if len(empty_sections) >= 2:
+        raise RuntimeError(
+            f"Seções sem fontes suficientes: {', '.join(empty_sections)}. "
+            "Cada seção técnica deve ter pelo menos 1 fonte citada."
+        )
+
+
+def validate_ai_response_quality(report: str) -> None:
+    """
+    Valida qualidade básica da resposta da IA antes de prosseguir.
+
+    Verificações:
+      - Tamanho mínimo de 200 caracteres
+      - Pelo menos 3 headings Markdown (##)
+      - Ausência da marcação "[sem validação externa]" (proibida)
+      - Parágrafos não-repetitivos (similaridade < 60% entre trechos)
+
+    Lança RuntimeError na primeira violação encontrada.
+    """
+    if len(report) < 200:
+        raise RuntimeError(
+            "Relatório gerado é muito curto (menos de 200 caracteres)."
+        )
+
+    heading_count = report.count("## ")
+    if heading_count < 3:
+        raise RuntimeError(
+            "Relatório não possui estrutura markdown mínima "
+            f"(apenas {heading_count} headings encontrados)."
+        )
+
+    if "[sem validação externa]" in report:
+        raise RuntimeError(
+            "Relatório contém marcação '[sem validação externa]', "
+            "que é proibida. A IA deve omitir afirmações sem fonte."
+        )
+
+    paragraphs = [p for p in report.split("\n\n") if p.strip()]
+    if len(paragraphs) >= 4:
+        unique_paras = set(p[:100] for p in paragraphs)
+        if len(unique_paras) < len(paragraphs) * 0.4:
+            raise RuntimeError(
+                "Relatório contém conteúdo repetitivo "
+                "(parágrafos muito similares entre si)."
+            )

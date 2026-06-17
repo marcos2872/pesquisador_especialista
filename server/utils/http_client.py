@@ -76,6 +76,13 @@ def http_get_json(
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return None
         if status is not None and status not in RETRYABLE_STATUS_CODES:
+            logger.warning(
+                "HTTP %d não retryable em %s (attempt %d/%d)",
+                status,
+                url,
+                attempt + 1,
+                max_retries,
+            )
             return None
         if attempt < max_retries:
             backoff = DEFAULT_BACKOFF * (attempt + 1)
@@ -114,6 +121,13 @@ def http_get_text(
             except Exception:
                 return None
         if status is not None and status not in RETRYABLE_STATUS_CODES:
+            logger.warning(
+                "HTTP %d não retryable em %s (attempt %d/%d)",
+                status,
+                url,
+                attempt + 1,
+                max_retries,
+            )
             return None
         if attempt < max_retries:
             backoff = DEFAULT_BACKOFF * (attempt + 1)
@@ -155,6 +169,13 @@ def http_post_json(
             except (json.JSONDecodeError, UnicodeDecodeError):
                 return None
         if status is not None and status not in RETRYABLE_STATUS_CODES:
+            logger.warning(
+                "HTTP %d não retryable em %s (attempt %d/%d)",
+                status,
+                url,
+                attempt + 1,
+                max_retries,
+            )
             return None
         if attempt < max_retries:
             backoff = DEFAULT_BACKOFF * (attempt + 1)

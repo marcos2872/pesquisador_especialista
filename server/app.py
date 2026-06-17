@@ -11,8 +11,6 @@ O .env é carregado antes de qualquer outro import para que as variáveis
 de ambiente (OPENAI_API_KEY, etc.) estejam disponíveis desde o início.
 """
 
-import os
-import sys
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 

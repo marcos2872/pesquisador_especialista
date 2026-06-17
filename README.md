@@ -19,7 +19,7 @@ pesquisador_especialista/
 │   ├── public/      # Assets estáticos (SVG, PNG)
 │   ├── dist/        # Build de produção (gerado)
 │   └── vite.config.ts
-└── tests/           # 104 testes pytest
+└── tests/           # 106 testes pytest
 ```
 
 ## Como executar
@@ -78,19 +78,40 @@ Sem `OPENAI_API_KEY`, a API retorna erro 502.
 
 ## Configuração de busca de fontes
 
-Sem nenhuma chave, o sistema já funciona com **Crossref**, **OpenAlex**, **arXiv** e **Core.ac.uk**.
+Sem nenhuma chave, o sistema já funciona com **Crossref**, **OpenAlex** e **arXiv**.
 
 | API | Uso | Cadastro |
 |-----|-----|----------|
 | Crossref | Artigos | Gratuito |
 | OpenAlex | Artigos | Gratuito |
 | arXiv | Pré-prints CS/ML | Gratuito |
-| Core.ac.uk | Artigos open access | Gratuito |
+| Core.ac.uk | Artigos open access | Requer chave (`CORE_API_KEY`) |
 | Semantic Scholar | Metadados ricos | Opcional |
 | Unpaywall | Link de PDF gratuito | Opcional |
 | IEEE Xplore | Artigos de engenharia | Opcional |
 | USPTO / EPO / Lens / WIPO | Patentes | Opcional |
 | SerpAPI | Google Scholar + Patents | Opcional |
+
+### Variáveis de ambiente disponíveis
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `OPENAI_API_KEY` | — | Chave da API OpenAI (obrigatório) |
+| `OPENAI_MODEL` | `gpt-5.4-mini` | Modelo OpenAI |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Endpoint (use para Azure) |
+| `OPENAI_TIMEOUT_SECONDS` | `240` | Timeout da chamada OpenAI |
+| `SERPAPI_API_KEY` | — | Chave SerpAPI (Google Scholar + Patents) |
+| `CORE_API_KEY` | — | Chave Core.ac.uk (artigos open access) |
+| `SEMANTIC_SCHOLAR_API_KEY` | — | Chave Semantic Scholar |
+| `IEEE_API_KEY` | — | Chave IEEE Xplore |
+| `EPO_OPS_CONSUMER_KEY` | — | Consumer key EPO/OPS (patentes) |
+| `EPO_OPS_CONSUMER_SECRET` | — | Consumer secret EPO/OPS |
+| `USPTO_API_KEY` | — | Chave USPTO (patentes) |
+| `LENS_API_TOKEN` | — | Token Lens.org (patentes) |
+| `WIPO_API_KEY` | — | Chave WIPO (patentes) |
+| `ENABLE_REAL_SEARCH` | `1` | `0` desativa busca real (usa só IA) |
+| `SEARCH_QUERY_DELAY_SECONDS` | `1.0` | Delay entre queries para rate limit |
+| `SEARCH_TIMEOUT_SECONDS` | `30` | Timeout das APIs de busca |
 
 ## Executar testes
 

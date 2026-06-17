@@ -17,7 +17,7 @@ import logging
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 from server.models.patent import Patent
@@ -52,7 +52,6 @@ def _get_epo_ops_token(timeout: int) -> Optional[str]:
     credentials = base64.b64encode(
         f"{consumer_key}:{consumer_secret}".encode("utf-8")
     ).decode("ascii")
-    data = urlencode({"grant_type": "client_credentials"}).encode("utf-8")
     headers = {
         "Authorization": f"Basic {credentials}",
         "Content-Type": "application/x-www-form-urlencoded",
@@ -369,14 +368,18 @@ def search_patents(
     from .wipo import search_wipo as _search_wipo_provider
 
     per_provider = max(3, max_results * 2)
-    providers = [
-        ("epo_ops", _search_epo_ops),
-        ("uspto", _search_uspto),
-        ("lens", _search_lens),
-        ("wipo", _search_wipo_provider),
-        ("google_patents", _search_google_patents),
-        ("patentsview", _search_patentsview),
-    ]
+    providers: list[tuple[str, Any]] = []
+    if os.getenv("EPO_OPS_CONSUMER_KEY", "").strip():
+        providers.append(("epo_ops", _search_epo_ops))
+    if os.getenv("USPTO_API_KEY", "").strip():
+        providers.append(("uspto", _search_uspto))
+    if os.getenv("LENS_API_TOKEN", "").strip():
+        providers.append(("lens", _search_lens))
+    if os.getenv("WIPO_API_KEY", "").strip():
+        providers.append(("wipo", _search_wipo_provider))
+    if os.getenv("SERPAPI_API_KEY", "").strip():
+        providers.append(("google_patents", _search_google_patents))
+    providers.append(("patentsview", _search_patentsview))
 
     collected: list[Patent] = []
 
@@ -401,8 +404,6 @@ def search_patents(
     valid = [p for p in deduped if p.is_valid()]
 
     # Enrich top patents with Google Patents details when SerpAPI key is available
-    import os
-
     if os.getenv("SERPAPI_API_KEY", "").strip() and valid:
         enriched = []
         for patent in valid[:max_results]:

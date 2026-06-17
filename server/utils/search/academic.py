@@ -22,7 +22,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlencode
 
 from server.models.article import Article
@@ -35,6 +35,7 @@ DEFAULT_MAX_RESULTS = 5
 DEFAULT_OPENALEX_EMAIL = os.getenv("OPENALEX_USER_AGENT", "pesquisador@example.com")
 DEFAULT_UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "")
 _SEMANTIC_SCHOLAR_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
+_CORE_API_KEY = os.getenv("CORE_API_KEY", "").strip()
 
 # URLs base das APIs
 _OPENALEX_BASE = "https://api.openalex.org"
@@ -247,10 +248,15 @@ def _search_arxiv(topic: str, max_results: int, timeout: int) -> list[Article]:
 
 
 def _search_core(topic: str, max_results: int, timeout: int) -> list[Article]:
-    """Busca artigos na API CORE (repositórios institucionais, gratuita)."""
+    """Busca artigos na API CORE (requer CORE_API_KEY)."""
     params = urlencode({"q": topic, "limit": str(max_results)})
     url = f"{_CORE_BASE}/search/works?{params}"
-    headers = {"Accept": "application/json"}
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+    }
+    if _CORE_API_KEY:
+        headers["Authorization"] = f"Bearer {_CORE_API_KEY}"
     data = http_get_json(url, headers, timeout)
     if not data:
         return []
@@ -399,22 +405,26 @@ def search_articles(
     remove duplicatas (DOI/título) e retorna até max_results artigos
     válidos (com título E link).
 
-    Providers ativos: Crossref, OpenAlex, arXiv, Core.ac.uk,
+    Providers ativos: Crossref, OpenAlex, arXiv, Core.ac.uk (se CORE_API_KEY setada),
     Semantic Scholar, IEEE Xplore, Google Scholar.
     """
     from .ieee import search_ieee as _search_ieee_provider
     from .serpapi import search_google_scholar as _search_google_scholar
 
     per_provider = max(3, max_results * 2)
-    providers = [
+    providers: list[tuple[str, Any]] = [
         ("crossref", _search_crossref),
         ("openalex", _search_openalex),
         ("arxiv", _search_arxiv),
-        ("core", _search_core),
-        ("semantic_scholar", _search_semantic_scholar),
-        ("ieee", _search_ieee_provider),
-        ("google_scholar", _search_google_scholar),
     ]
+    if _CORE_API_KEY:
+        providers.append(("core", _search_core))
+    if os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip():
+        providers.append(("semantic_scholar", _search_semantic_scholar))
+    if os.getenv("IEEE_API_KEY", "").strip():
+        providers.append(("ieee", _search_ieee_provider))
+    if os.getenv("SERPAPI_API_KEY", "").strip():
+        providers.append(("google_scholar", _search_google_scholar))
 
     collected: list[Article] = []
 

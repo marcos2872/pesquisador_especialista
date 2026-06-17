@@ -18,7 +18,7 @@ Estratégia:
 import re
 
 from server.services.source_service import _is_search_or_home_url
-from server.utils.fetcher import validate_quoted_citations, validate_url_relevance
+from server.utils.fetcher import validate_url_relevance
 
 MIN_UNIQUE_SOURCES = 3
 

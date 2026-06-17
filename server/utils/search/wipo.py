@@ -10,7 +10,6 @@ de patente (EPO, USPTO, Google Patents, etc.).
 
 import os
 import re
-from typing import Optional
 
 from server.models.patent import Patent
 from server.utils.http_client import http_post_json

@@ -203,7 +203,13 @@ def test_search_patents_combines_multiple_providers():
     a = Patent(title="A", number="US1", url="https://x", source_api="epo_ops")
     b = Patent(title="B", number="US2", url="https://y", source_api="uspto")
     c = Patent(title="C", number="US3", url="https://z", source_api="lens")
+    env_vars = {
+        "EPO_OPS_CONSUMER_KEY": "test-key",
+        "USPTO_API_KEY": "test-key",
+        "LENS_API_TOKEN": "test-token",
+    }
     with (
+        patch.dict("os.environ", env_vars),
         patch("server.utils.search.patents._search_epo_ops", return_value=[a]),
         patch("server.utils.search.patents._search_uspto", return_value=[b]),
         patch("server.utils.search.patents._search_lens", return_value=[c]),

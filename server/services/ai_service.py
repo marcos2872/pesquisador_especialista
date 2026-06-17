@@ -14,11 +14,15 @@ Azure OpenAI é detectado automaticamente pela presença de
 """
 
 import json
+import logging
 import os
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from server.config import build_retry_prompt, build_user_prompt, load_prompt_template
+
+logger = logging.getLogger("pesquisador.ai")
 
 
 def extract_openai_text(data: dict) -> str:
@@ -140,19 +144,43 @@ def call_openai(
     )
 
     request_timeout = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "240"))
-    try:
-        with urlopen(req, timeout=request_timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except HTTPError as err:
-        body = err.read().decode("utf-8", errors="ignore")
-        if err.code == 404:
-            raise RuntimeError(
-                f"Modelo '{model}' não encontrado no endpoint '{base_url}'. "
-                "Verifique OPENAI_MODEL e OPENAI_BASE_URL."
-            ) from err
-        raise RuntimeError(f"Falha OpenAI ({err.code}): {body}") from err
-    except URLError as err:
-        raise RuntimeError(f"Falha de conexão OpenAI: {err.reason}") from err
+    max_retries = 2
+    for attempt in range(max_retries + 1):
+        try:
+            with urlopen(req, timeout=request_timeout) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as err:
+            body = err.read().decode("utf-8", errors="ignore")
+            if err.code == 404:
+                raise RuntimeError(
+                    f"Modelo '{model}' não encontrado no endpoint '{base_url}'. "
+                    "Verifique OPENAI_MODEL e OPENAI_BASE_URL."
+                ) from err
+            if err.code in {429, 500, 502, 503, 504} and attempt < max_retries:
+                backoff = 1.0 * (2 ** attempt)
+                logger.warning(
+                    "OpenAI retry %d/%d (status=%d), aguardando %.0fs...",
+                    attempt + 1,
+                    max_retries,
+                    err.code,
+                    backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise RuntimeError(f"Falha OpenAI ({err.code}): {body}") from err
+        except URLError as err:
+            if attempt < max_retries:
+                backoff = 1.0 * (2 ** attempt)
+                logger.warning(
+                    "OpenAI retry %d/%d (conexão), aguardando %.0fs...",
+                    attempt + 1,
+                    max_retries,
+                    backoff,
+                )
+                time.sleep(backoff)
+                continue
+            raise RuntimeError(f"Falha de conexão OpenAI: {err.reason}") from err
 
     text = extract_openai_text(data)
     if text:

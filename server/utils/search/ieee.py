@@ -8,7 +8,6 @@ silenciosamente — útil para ambientes de desenvolvimento sem a chave.
 """
 
 import os
-from typing import Optional
 from urllib.parse import urlencode
 
 from server.models.article import Article

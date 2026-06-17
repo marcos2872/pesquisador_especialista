@@ -34,7 +34,7 @@ def _build_url(engine: str, query: str, num: int) -> str:
         "engine": engine,
         "q": query,
         "api_key": api_key,
-        "num": str(num),
+        "num": str(max(10, num)),
     }
     return f"{_SERPAPI_BASE}?{urlencode(params)}"
 
@@ -74,6 +74,8 @@ def search_google_patents(
     for item in data.get("organic_results", []):
         title = (item.get("title") or "").strip()
         patent_id = item.get("patent_id") or ""
+        patent_id = re.sub(r"^/?patent/", "", patent_id)
+        patent_id = re.sub(r"/\w{2}$", "", patent_id)
         link = item.get("link") or ""
         if not title or not patent_id:
             continue

@@ -15,7 +15,6 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 # Importa os módulos de busca. Se não existirem (ex.: durante testes ou
 # instalação parcial), retorna contexto vazio em vez de quebrar.
@@ -92,6 +91,15 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
                 all_patents.extend(future_pat.result())
             except Exception as exc:
                 logger.warning("Falha na busca de patentes para '%s': %s", query, exc)
+
+    # Dedup global entre queries (o mesmo artigo/patente pode vir de múltiplas queries)
+    try:
+        from server.utils.search.academic import _dedup_articles
+        from server.utils.search.patents import _dedup_patents
+        all_articles = _dedup_articles(all_articles)
+        all_patents = _dedup_patents(all_patents)
+    except ImportError:
+        pass
 
     if not all_articles and not all_patents:
         logger.info("Nenhuma fonte real encontrada para o tópico '%s'", topic)
