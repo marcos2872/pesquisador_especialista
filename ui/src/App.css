@@ -1,0 +1,104 @@
+:root {
+    --color-borgonha: #8a193a;
+    --color-orange: #ff7524;
+    --color-red-orange: #ff3300;
+    --color-nude-light: #e5d5cc;
+    --color-nude-medium: #bcaa9f;
+    --color-surface-elevated: #2e2e2e;
+    --color-text-muted: #6b6b6b;
+    --color-overlay-primary-50: rgba(215, 32, 66, 0.05);
+    --color-success: #17a34a;
+    --color-warning: #eab308;
+    --color-danger: #dc2626;
+}
+
+body {
+    margin: 0;
+}
+
+.logo-header {
+    height: 36px;
+    width: auto;
+    display: block;
+}
+
+.logo-sidebar {
+    height: 60px;
+    width: auto;
+    display: block;
+}
+
+#report-output {
+    padding: 16px;
+}
+
+#report-output h2 {
+    font-size: 1.25em;
+    font-weight: 700;
+    margin-top: 24px;
+    margin-bottom: 12px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #333;
+}
+
+#report-output table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+    max-width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 12px 0;
+    border: 1px solid #333;
+    border-radius: 4px;
+}
+
+#report-output table thead {
+    background: #1a1a1a;
+}
+
+#report-output table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    padding: 10px 14px;
+    border: 1px solid #333;
+    text-align: left;
+    white-space: nowrap;
+}
+
+#report-output table td {
+    padding: 10px 14px;
+    border: 1px solid #333;
+    vertical-align: top;
+    line-height: 1.5;
+}
+
+#report-output table a {
+    color: #d72042;
+    text-decoration: underline;
+}
+
+#report-output blockquote {
+    margin: 12px 0;
+    padding: 8px 12px;
+    border-left: 3px solid #d72042;
+    background: rgba(215, 32, 66, 0.05);
+    border-radius: 0 4px 4px 0;
+}
+
+#report-output a {
+    color: #d72042;
+    text-decoration: underline;
+}
+
+#report-output ul {
+    padding-left: 20px;
+}
+
+#report-output code {
+    font-size: 0.85em;
+    padding: 2px 4px;
+    border-radius: 3px;
+}

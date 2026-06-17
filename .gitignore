@@ -12,3 +12,12 @@ dist/
 build/
 *.pyc
 *.log
+
+# Frontend (Vite)
+ui/node_modules/
+ui/dist/
+ui/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
