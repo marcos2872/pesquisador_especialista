@@ -1,119 +1,61 @@
-# Plataforma de Pesquisa com IA — SENAI-SP Distrito Tecnológico
+# Pesquisador Especialista
 
-Aplicação web para gerar revisões técnicas em **Markdown** a partir de um tópico de pesquisa, incluindo seção de referências com links verificáveis e visualização renderizada na interface.
+Plataforma web para gerar revisões técnicas em Markdown sobre qualquer tópico de pesquisa. Combina busca em APIs acadêmicas gratuitas (Crossref, OpenAlex, arXiv) com IA (OpenAI/Azure) para produzir relatórios estruturados em 6 seções com fontes verificáveis.
 
-## Arquitetura
+## Stack
 
-```
-pesquisador_especialista/
-├── server/          # Backend Python (API HTTP)
-│   ├── app.py       # Entry point do servidor
-│   ├── config.py    # Configurações e templates de prompt
-│   ├── handlers/    # HTTP handlers (rotas API)
-│   ├── services/    # Lógica de negócio (IA, fontes, banco)
-│   ├── models/      # Dataclasses (Article, Patent)
-│   ├── utils/       # Fetcher, HTTP client, módulos de busca
-│   └── prompts/     # systemprompt.md, userprompt.md
-├── ui/              # Frontend React + Vite
-│   ├── src/         # Componentes React + CSS
-│   ├── public/      # Assets estáticos (SVG, PNG)
-│   ├── dist/        # Build de produção (gerado)
-│   └── vite.config.ts
-└── tests/           # 106 testes pytest
-```
+- **Backend:** Python 3.11+ (stdlib `http.server`, zero frameworks)
+- **Frontend:** React 19 + TypeScript + Vite + Mantine 9
+- **IA:** OpenAI-compatible API (Azure OpenAI suportado)
+- **Banco:** SQLite (`~/.pesquisador/history.db`)
 
-## Como executar
-
-### 1. Backend (API)
+## Rápido
 
 ```bash
-cp .env.example .env
-uv run --env-file .env python app.py
-# Ou diretamente:
-python app.py
+cp .env.example .env          # edite com sua OPENAI_API_KEY
+make dev                      # API (8000) + UI (5173) em paralelo
 ```
 
-O servidor inicia em `http://127.0.0.1:8000`.
-
-### 2. Frontend (desenvolvimento)
+Individualmente:
 
 ```bash
-cd ui
-npm install
-npm run dev
+make api                      # só backend → http://127.0.0.1:8000
+make ui                       # só frontend → http://localhost:5173
+make install                  # instala Python + Node
+make test                     # roda pytest
+make lint                     # ruff + ESLint
+make clean                    # remove caches
 ```
 
-O dev server inicia em `http://localhost:5173` com proxy `/api/*` para `127.0.0.1:8000`.
+## API Keys
 
-### 3. Build de produção (UI)
+| Serviço | Variável | Para que serve | Tipo de dado retornado | Cadastro | Obrigatório |
+|---|---|---|---|---|---|
+| OpenAI | `OPENAI_API_KEY` | Geração do relatório via LLM (6 seções) | Texto Markdown estruturado | [platform.openai.com](https://platform.openai.com/api-keys) | Sim |
+| Core.ac.uk | `CORE_API_KEY` | Artigos open access de repositórios institucionais | Metadados completos (título, autores, DOI, abstract) | [core.ac.uk/services/api](https://core.ac.uk/services/api/) | Não |
+| Semantic Scholar | `SEMANTIC_SCHOLAR_API_KEY` | Artigos com metadados enriquecidos e rede de citações | Artigos com embeddings, influência, citações | [semanticscholar.org/product/api](https://www.semanticscholar.org/product/api) | Não |
+| IEEE Xplore | `IEEE_API_KEY` | Artigos de engenharia, computação e tecnologia | Artigos IEEE com metadados completos | [developer.ieee.org](https://developer.ieee.org/) | Não |
+| SerpAPI | `SERPAPI_API_KEY` | Google Scholar (artigos) + Google Patents | Resultados de busca estruturados | [serpapi.com](https://serpapi.com/) | Não |
+| Espacenet OPS | `EPO_OPS_CONSUMER_KEY` + `SECRET` | Patentes europeias e internacionais | Dados bibliográficos, citações, famílias | [developer.epo.org](https://developer.epo.org/) | Não |
+| USPTO | `USPTO_API_KEY` | Patentes americanas | Patentes USPTO com título, inventores, classificação | [developer.uspto.gov](https://developer.uspto.gov/) | Não |
+| Lens.org | `LENS_API_TOKEN` | Patentes + literatura acadêmica | Patentes com famílias, citações, jurisdições | [lens.org](https://www.lens.org/) | Não |
+| WIPO Patentscope | `WIPO_API_KEY` | Patentes PCT (internacionais) | Patentes WIPO com dados bibliográficos | [patentscope.wipo.int](https://patentscope.wipo.int/) | Não |
 
-```bash
-cd ui
-npm run build    # output em ui/dist/
-```
+> Sem chaves opcionais, o sistema já funciona com Crossref, OpenAlex e arXiv (artigos) — todos gratuitos sem cadastro.
 
-O backend em produção serve os arquivos de `ui/dist/`.
+## Documentação técnica
 
-## Configuração de IA
+Arquivos em [docs/](docs/):
 
-### Opção 1: OpenAI (API padrão)
+| Arquivo | Conteúdo |
+|---|---|
+| `api.md` | Endpoints, exemplos, códigos de erro |
+| `models.md` | Dataclasses Article e Patent |
+| `architecture.md` | Stack, diretórios, fluxo, providers |
+| `components.md` | Componentes React, props, estado |
+| `setup.md` | Setup completo, API keys com links de cadastro |
 
-```bash
-export OPENAI_API_KEY="sua-chave"
-export OPENAI_MODEL="gpt-5.4-mini"   # opcional
-uv run --env-file .env python app.py
-```
-
-### Opção 2: Azure OpenAI (`.../openai/v1`)
-
-```bash
-export OPENAI_BASE_URL="https://SEU-RECURSO.openai.azure.com/openai/v1"
-export OPENAI_API_KEY="sua-chave-azure"
-export OPENAI_MODEL="nome-do-deployment"
-export OPENAI_DEBUG="1"  # opcional
-export OPENAI_TIMEOUT_SECONDS="240"
-```
-
-Sem `OPENAI_API_KEY`, a API retorna erro 502.
-
-## Configuração de busca de fontes
-
-Sem nenhuma chave, o sistema já funciona com **Crossref**, **OpenAlex** e **arXiv**.
-
-| API | Uso | Cadastro |
-|-----|-----|----------|
-| Crossref | Artigos | Gratuito |
-| OpenAlex | Artigos | Gratuito |
-| arXiv | Pré-prints CS/ML | Gratuito |
-| Core.ac.uk | Artigos open access | Requer chave (`CORE_API_KEY`) |
-| Semantic Scholar | Metadados ricos | Opcional |
-| Unpaywall | Link de PDF gratuito | Opcional |
-| IEEE Xplore | Artigos de engenharia | Opcional |
-| USPTO / EPO / Lens / WIPO | Patentes | Opcional |
-| SerpAPI | Google Scholar + Patents | Opcional |
-
-### Variáveis de ambiente disponíveis
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `OPENAI_API_KEY` | — | Chave da API OpenAI (obrigatório) |
-| `OPENAI_MODEL` | `gpt-5.4-mini` | Modelo OpenAI |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Endpoint (use para Azure) |
-| `OPENAI_TIMEOUT_SECONDS` | `240` | Timeout da chamada OpenAI |
-| `SERPAPI_API_KEY` | — | Chave SerpAPI (Google Scholar + Patents) |
-| `CORE_API_KEY` | — | Chave Core.ac.uk (artigos open access) |
-| `SEMANTIC_SCHOLAR_API_KEY` | — | Chave Semantic Scholar |
-| `IEEE_API_KEY` | — | Chave IEEE Xplore |
-| `EPO_OPS_CONSUMER_KEY` | — | Consumer key EPO/OPS (patentes) |
-| `EPO_OPS_CONSUMER_SECRET` | — | Consumer secret EPO/OPS |
-| `USPTO_API_KEY` | — | Chave USPTO (patentes) |
-| `LENS_API_TOKEN` | — | Token Lens.org (patentes) |
-| `WIPO_API_KEY` | — | Chave WIPO (patentes) |
-| `ENABLE_REAL_SEARCH` | `1` | `0` desativa busca real (usa só IA) |
-| `SEARCH_QUERY_DELAY_SECONDS` | `1.0` | Delay entre queries para rate limit |
-| `SEARCH_TIMEOUT_SECONDS` | `30` | Timeout das APIs de busca |
-
-## Executar testes
+## Testes
 
 ```bash
 uv run pytest

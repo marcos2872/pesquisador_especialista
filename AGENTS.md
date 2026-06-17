@@ -13,7 +13,7 @@
 ```bash
 # Backend dev
 cp .env.example .env  # then edit OPENAI_API_KEY
-uv run --env-file .env python app.py          # starts on http://127.0.0.1:8000
+uv run app.py          # starts on http://127.0.0.1:8000
 
 # Frontend dev (separate terminal)
 cd ui && npm install && npm run dev           # http://localhost:5173, proxies /api → :8000
