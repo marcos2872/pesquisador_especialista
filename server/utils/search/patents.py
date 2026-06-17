@@ -27,7 +27,10 @@ from server.utils.search.serpapi_patents import enrich_patent_with_details
 logger = logging.getLogger("pesquisador.patents")
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
-DEFAULT_MAX_RESULTS = 3
+DEFAULT_MAX_RESULTS = 5  # Patentes finais retornadas por search_patents() após dedup
+PROVIDER_MULTIPLIER = (
+    2  # Cada provider busca max_results * PROVIDER_MULTIPLIER para garantir variedade
+)
 
 _EPO_OPS_BASE = "https://ops.epo.org/3.2/rest-services"
 _EPO_OPS_TOKEN_URL = "https://ops.epo.org/3.2/auth/accesstoken"
@@ -367,7 +370,7 @@ def search_patents(
     from .serpapi_patents import search_google_patents as _search_google_patents
     from .wipo import search_wipo as _search_wipo_provider
 
-    per_provider = max(3, max_results * 2)
+    per_provider = max(3, max_results * PROVIDER_MULTIPLIER)
     providers: list[tuple[str, Any]] = []
     if os.getenv("EPO_OPS_CONSUMER_KEY", "").strip():
         providers.append(("epo_ops", _search_epo_ops))

@@ -31,7 +31,11 @@ from server.utils.http_client import http_get_json, http_get_text
 logger = logging.getLogger("pesquisador.academic")
 
 DEFAULT_TIMEOUT = int(os.getenv("SEARCH_TIMEOUT_SECONDS", "30"))
-DEFAULT_MAX_RESULTS = 5
+DEFAULT_MAX_RESULTS = 10  # Artigos finais retornados por search_articles() após dedup
+PROVIDER_MULTIPLIER = (
+    2  # Cada provider busca max_results * PROVIDER_MULTIPLIER para garantir variedade
+)
+
 DEFAULT_OPENALEX_EMAIL = os.getenv("OPENALEX_USER_AGENT", "pesquisador@example.com")
 DEFAULT_UNPAYWALL_EMAIL = os.getenv("UNPAYWALL_EMAIL", "")
 _SEMANTIC_SCHOLAR_API_KEY = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "").strip()
@@ -411,7 +415,7 @@ def search_articles(
     from .ieee import search_ieee as _search_ieee_provider
     from .serpapi import search_google_scholar as _search_google_scholar
 
-    per_provider = max(3, max_results * 2)
+    per_provider = max(3, max_results * PROVIDER_MULTIPLIER)
     providers: list[tuple[str, Any]] = [
         ("crossref", _search_crossref),
         ("openalex", _search_openalex),

@@ -35,6 +35,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("pesquisador")
 
+# ── Limites de coleta ──────────────────────────────────────────────
+MAX_QUERY_VARIANTS = 5  # Qtde de queries geradas a partir do tópico
+ARTICLES_PER_QUERY = 8  # Artigos buscados por query (antes da dedup entre queries)
+PATENTS_PER_QUERY = 6  # Patentes buscadas por query (antes da dedup entre queries)
+# O total final que chega ao prompt da IA é menor: ~5 artigos / ~3 patentes
+# (definido por DEFAULT_MAX_RESULTS em academic.py e patents.py,
+#  mais dedup entre queries e filtro de validade).
+# ────────────────────────────────────────────────────────────────────
+
 
 def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
     """
@@ -70,16 +79,16 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
 
     # Delay entre queries para evitar rate limits das APIs gratuitas
     query_delay = float(os.getenv("SEARCH_QUERY_DELAY_SECONDS", "1.0"))
-    for i, query in enumerate(queries[:5]):  # Usa até 5 queries para melhor cobertura
+    for i, query in enumerate(queries[:MAX_QUERY_VARIANTS]):
         if i > 0 and query_delay > 0:
             time.sleep(query_delay)
         # Busca artigos e patentes em paralelo para cada query
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_art = executor.submit(
-                search_articles, query, max_results=5, timeout=15
+                search_articles, query, max_results=ARTICLES_PER_QUERY, timeout=15
             )
             future_pat = executor.submit(
-                search_patents, query, max_results=3, timeout=15
+                search_patents, query, max_results=PATENTS_PER_QUERY, timeout=15
             )
 
             try:
@@ -96,6 +105,7 @@ def _collect_real_sources(topic: str) -> tuple[str, dict[str, list[str]]]:
     try:
         from server.utils.search.academic import _dedup_articles
         from server.utils.search.patents import _dedup_patents
+
         all_articles = _dedup_articles(all_articles)
         all_patents = _dedup_patents(all_patents)
     except ImportError:

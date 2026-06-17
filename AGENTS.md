@@ -58,6 +58,20 @@ app.py → server/app.py → ResearchHandler
 - `SEARCH_QUERY_DELAY_SECONDS=0` in env to speed up tests.
 - Integration tests (`test_app_integration.py`) mock `server.services.source_collector` and `server.utils.fetcher`.
 
+## Constantes de coleta (limites)
+
+| Constante | Arquivo | Valor | Efeito |
+|---|---|---|---|
+| `MAX_QUERY_VARIANTS` | `source_collector.py` | 5 | Até 5 queries geradas por tópico |
+| `ARTICLES_PER_QUERY` | `source_collector.py` | 8 | Artigos buscados por query (antes da dedup) |
+| `PATENTS_PER_QUERY` | `source_collector.py` | 6 | Patentes buscadas por query (antes da dedup) |
+| `DEFAULT_MAX_RESULTS` | `academic.py` | 10 | Artigos finais retornados por `search_articles()` |
+| `PROVIDER_MULTIPLIER` | `academic.py` | 2 | Provider busca `max_results × 2` |
+| `DEFAULT_MAX_RESULTS` | `patents.py` | 5 | Patentes finais retornadas por `search_patents()` |
+| `PROVIDER_MULTIPLIER` | `patents.py` | 2 | Provider busca `max_results × 2` |
+| `SOURCES_MAX_ARTICLES` | env / `prompt_enrichment.py` | 50 | Teto de artigos no prompt (nunca atingido) |
+| `SOURCES_MAX_PATENTS` | env / `prompt_enrichment.py` | 30 | Teto de patentes no prompt (nunca atingido) |
+
 ## Project conventions
 
 - Python: no type stubs in prod code (stdlib only), `ruff` for lint.
